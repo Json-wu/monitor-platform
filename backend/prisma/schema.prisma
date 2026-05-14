@@ -1,0 +1,513 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────
+
+enum AppStatus {
+  active
+  maintenance
+  disabled
+}
+
+enum AppEnv {
+  production
+  staging
+  development
+}
+
+enum UserStatus {
+  active
+  suspended
+  banned
+  deleted
+}
+
+enum TransactionType {
+  grant
+  deduct
+  expire
+  refund
+  purchase
+}
+
+enum CreditType {
+  subscription
+  payg
+  promo
+}
+
+enum OrderType {
+  subscription
+  payg
+  one_time
+}
+
+enum OrderStatus {
+  pending
+  paid
+  failed
+  refunded
+  cancelled
+}
+
+enum SubStatus {
+  active
+  past_due
+  cancelled
+  expired
+}
+
+enum CouponType {
+  percentage
+  fixed_amount
+  extra_credits
+}
+
+enum BillingInterval {
+  monthly
+  quarterly
+  yearly
+  one_time
+}
+
+enum NotificationChannel {
+  email
+  in_app
+  webhook
+  wecom
+}
+
+enum TriggerEvent {
+  manual
+  order_paid
+  order_refunded
+  user_registered
+  verification_code
+  credits_low
+  credits_granted
+}
+
+enum NotificationStatus {
+  draft
+  queued
+  sent
+  failed
+  cancelled
+}
+
+// ─── Application Registry ────────────────────────────────
+
+model Application {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String
+  slug        String    @unique
+  domain      String
+  logoUrl     String?   @map("logo_url")
+  description String?
+  status         AppStatus @default(active)
+  environment  AppEnv    @default(production)
+  pricingPage    Json      @default("{}") @map("pricing_page")
+  googleClientId String?   @map("google_client_id")
+  apiKey         String?   @unique @map("api_key")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  endUsers       EndUser[]
+  creditAccounts CreditAccount[]
+  orders         Order[]
+  subscriptions  Subscription[]
+  pricingPlans   PricingPlan[]
+  coupons        Coupon[]
+  endUserAuditLogs EndUserAuditLog[]
+  clientActivityLogs ClientActivityLog[]
+  notificationTemplates NotificationTemplate[]
+  notificationLogs NotificationLog[]
+  emailVerificationCodes EmailVerificationCode[]
+  clearbgAnonymousDaily ClearbgAnonymousDailyUsage[]
+
+  @@map("application")
+}
+
+/// 全站第三方集成，按 name 一条记录一类（linkmePay / removeBackground / smtp），所有 Application 共用。
+model GlobalIntegrationSetting {
+  name      String   @id
+  config    Json     @default("{}")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("global_integration_setting")
+}
+
+// ─── Admin User & Roles (RBAC) ───────────────────────────
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  displayName String   @map("display_name")
+  permissions Json     @default("{}")
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  adminUsers AdminUser[]
+
+  @@map("role")
+}
+
+model AdminUser {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique
+  name         String
+  passwordHash String    @map("password_hash")
+  avatarUrl    String?   @map("avatar_url")
+  roleId       String    @map("role_id") @db.Uuid
+  role         Role      @relation(fields: [roleId], references: [id])
+  isActive     Boolean   @default(true) @map("is_active")
+  twoFactor    Boolean   @default(false) @map("two_factor")
+  allowedApps  String[]  @default([]) @map("allowed_apps")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  systemOperationLogs SystemOperationLog[]
+  endUserAuditsAsActor EndUserAuditLog[] @relation("EndUserAuditActor")
+  creditTransactions CreditTransaction[] @relation("OperatorTransactions")
+
+  @@map("admin_user")
+}
+
+// ─── End Users ───────────────────────────────────────────
+
+model EndUser {
+  id            String     @id @default(uuid()) @db.Uuid
+  appId         String     @map("app_id") @db.Uuid
+  app           Application @relation(fields: [appId], references: [id])
+  email         String
+  name          String?
+  passwordHash  String?    @map("password_hash")
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  avatarUrl     String?    @map("avatar_url")
+  phone         String?
+  oauthProvider String?    @map("oauth_provider")
+  oauthId       String?    @map("oauth_id")
+  status        UserStatus @default(active)
+  planId        String?    @map("plan_id") @db.Uuid
+  plan          PricingPlan? @relation(fields: [planId], references: [id])
+  tags          String[]   @default([])
+  notes         String?
+  metadata      Json       @default("{}")
+  ipAddress     String?    @map("ip_address")
+  country       String?
+  lastActiveAt  DateTime?  @map("last_active_at")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+  /// 调用 clearbg 等公开 API 的终端用户密钥（由用户在控制台生成，注册时不写入）
+  apiKey        String?    @unique @map("end_user_api_key")
+
+  creditAccount CreditAccount?
+  orders        Order[]
+  subscriptions Subscription[]
+  notifications NotificationLog[]
+  endUserAuditLogs EndUserAuditLog[]
+  clientActivityLogs ClientActivityLog[]
+
+  @@unique([appId, email])
+  @@index([appId, status])
+  @@index([email])
+  @@map("end_user")
+}
+
+/// 未登录用户按 IP 的免费公开 API 次数（UTC 自然日）：抠图 `/v1/clearbg` 与生图 `/public/image-generation/*` 共用同一占用（按 app_id 区分应用）。
+model ClearbgAnonymousDailyUsage {
+  id        String      @id @default(uuid()) @db.Uuid
+  appId     String      @map("app_id") @db.Uuid
+  app       Application @relation(fields: [appId], references: [id], onDelete: Cascade)
+  ip        String
+  dayUtc    DateTime    @map("day_utc") @db.Date
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  @@unique([appId, ip, dayUtc])
+  @@index([appId, dayUtc])
+  @@map("clearbg_anonymous_daily_usage")
+}
+
+/// 邮箱注册验证码（仅存哈希）
+model EmailVerificationCode {
+  id         String    @id @default(uuid()) @db.Uuid
+  appId      String    @map("app_id") @db.Uuid
+  app        Application @relation(fields: [appId], references: [id], onDelete: Cascade)
+  email      String
+  codeHash   String    @map("code_hash")
+  purpose    String    @default("register")
+  expiresAt  DateTime  @map("expires_at")
+  consumedAt DateTime? @map("consumed_at")
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([appId, email])
+  @@map("email_verification_code")
+}
+
+// ─── Credits ─────────────────────────────────────────────
+
+model CreditAccount {
+  id           String      @id @default(uuid()) @db.Uuid
+  userId       String      @unique @map("user_id") @db.Uuid
+  user         EndUser     @relation(fields: [userId], references: [id])
+  appId        String      @map("app_id") @db.Uuid
+  app          Application @relation(fields: [appId], references: [id])
+  balanceSub   Int         @default(0) @map("balance_sub")
+  balancePayg  Int         @default(0) @map("balance_payg")
+  balancePromo Int         @default(0) @map("balance_promo")
+  totalEarned  Int         @default(0) @map("total_earned")
+  totalSpent   Int         @default(0) @map("total_spent")
+  /// UTC 日历日 `YYYY-MM-DD`，记录最近一次每日免费积分（promo）调度是否已处理，防重复执行
+  lastDailyPromoResetDate String? @map("last_daily_promo_reset_date") @db.VarChar(10)
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  transactions CreditTransaction[]
+
+  @@unique([userId, appId])
+  @@map("credit_account")
+}
+
+model CreditTransaction {
+  id           String          @id @default(uuid()) @db.Uuid
+  accountId    String          @map("account_id") @db.Uuid
+  account      CreditAccount   @relation(fields: [accountId], references: [id])
+  appId        String          @map("app_id") @db.Uuid
+  type         TransactionType
+  creditType   CreditType      @map("credit_type")
+  amount       Int
+  balanceAfter Int             @map("balance_after")
+  reason       String
+  referenceId  String?         @map("reference_id")
+  operatorId   String?         @map("operator_id") @db.Uuid
+  operator     AdminUser?      @relation("OperatorTransactions", fields: [operatorId], references: [id])
+  ipAddress    String?         @map("ip_address")
+  createdAt    DateTime        @default(now()) @map("created_at")
+
+  @@index([accountId, createdAt])
+  @@map("credit_transaction")
+}
+
+// ─── Orders & Payments ───────────────────────────────────
+
+model Order {
+  id             String      @id @default(uuid()) @db.Uuid
+  appId          String      @map("app_id") @db.Uuid
+  app            Application @relation(fields: [appId], references: [id])
+  userId         String      @map("user_id") @db.Uuid
+  user           EndUser     @relation(fields: [userId], references: [id])
+  orderNo        String      @unique @map("order_no")
+  type           OrderType
+  status         OrderStatus @default(pending)
+  amount         Decimal     @db.Decimal(10, 2)
+  currency       String      @default("USD")
+  planId         String?     @map("plan_id") @db.Uuid
+  creditsGranted Int         @default(0) @map("credits_granted")
+  couponId       String?     @map("coupon_id") @db.Uuid
+  discountAmount Decimal?    @map("discount_amount") @db.Decimal(10, 2)
+  gateway        String      @default("stripe")
+  gatewayOrderId String?     @map("gateway_order_id")
+  gatewayPayload Json?       @map("gateway_payload")
+  refundAmount   Decimal?    @map("refund_amount") @db.Decimal(10, 2)
+  refundReason   String?     @map("refund_reason")
+  paidAt         DateTime?   @map("paid_at")
+  refundedAt     DateTime?   @map("refunded_at")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  @@index([appId, status, createdAt])
+  @@map("order")
+}
+
+model Subscription {
+  id                 String      @id @default(uuid()) @db.Uuid
+  appId              String      @map("app_id") @db.Uuid
+  app                Application @relation(fields: [appId], references: [id])
+  userId             String      @map("user_id") @db.Uuid
+  user               EndUser     @relation(fields: [userId], references: [id])
+  planId             String      @map("plan_id") @db.Uuid
+  plan               PricingPlan @relation(fields: [planId], references: [id])
+  status             SubStatus   @default(active)
+  gatewaySubId       String?     @map("gateway_sub_id")
+  currentPeriodStart DateTime    @map("current_period_start")
+  currentPeriodEnd   DateTime    @map("current_period_end")
+  cancelAt           DateTime?   @map("cancel_at")
+  createdAt          DateTime    @default(now()) @map("created_at")
+  updatedAt          DateTime    @updatedAt @map("updated_at")
+
+  @@unique([appId, userId])
+  @@map("subscription")
+}
+
+model Coupon {
+  id         String     @id @default(uuid()) @db.Uuid
+  appId      String     @map("app_id") @db.Uuid
+  app        Application @relation(fields: [appId], references: [id])
+  code       String     @unique
+  type       CouponType
+  value      Decimal    @db.Decimal(10, 2)
+  maxUses    Int?       @map("max_uses")
+  usedCount  Int        @default(0) @map("used_count")
+  validFrom  DateTime   @map("valid_from")
+  validUntil DateTime?  @map("valid_until")
+  isActive   Boolean    @default(true) @map("is_active")
+  createdAt  DateTime   @default(now()) @map("created_at")
+
+  @@map("coupon")
+}
+
+// ─── Pricing ─────────────────────────────────────────────
+
+model PricingPlan {
+  id              String          @id @default(uuid()) @db.Uuid
+  appId           String          @map("app_id") @db.Uuid
+  app             Application     @relation(fields: [appId], references: [id])
+  name            String
+  slug            String
+  description     String?
+  isActive        Boolean         @default(true) @map("is_active")
+  sortOrder       Int             @default(0) @map("sort_order")
+  billingInterval BillingInterval @map("billing_interval")
+  price           Decimal         @db.Decimal(10, 2)
+  currency        String          @default("USD")
+  creditsPerCycle Int             @map("credits_per_cycle")
+  features        Json            @default("[]")
+  limits          Json            @default("{}")
+  stripePriceId   String?         @map("stripe_price_id")
+  metadata        Json?
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  endUsers      EndUser[]
+  subscriptions Subscription[]
+
+  @@unique([appId, slug])
+  @@map("pricing_plan")
+}
+
+// ─── End-user activity (终端用户相关操作) ─────────────────
+
+model EndUserAuditLog {
+  id               String   @id @default(uuid()) @db.Uuid
+  appId            String   @map("app_id") @db.Uuid
+  app              Application @relation(fields: [appId], references: [id], onDelete: Cascade)
+  endUserId        String   @map("end_user_id") @db.Uuid
+  endUser          EndUser  @relation(fields: [endUserId], references: [id], onDelete: Cascade)
+  module           String
+  action           String
+  summary          String
+  metadata         Json?
+  actorAdminId     String?  @map("actor_admin_id") @db.Uuid
+  actorAdmin       AdminUser? @relation("EndUserAuditActor", fields: [actorAdminId], references: [id])
+  actorAdminEmail  String?  @map("actor_admin_email")
+  ipAddress        String   @map("ip_address")
+  userAgent        String?  @map("user_agent")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([appId, createdAt])
+  @@index([endUserId, createdAt])
+  @@index([module, createdAt])
+  @@map("end_user_audit_log")
+}
+
+/// 官网 / 匿名访客行为（含登录后可选 endUserId）
+model ClientActivityLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  appId       String   @map("app_id") @db.Uuid
+  app         Application @relation(fields: [appId], references: [id], onDelete: Cascade)
+  endUserId   String?  @map("end_user_id") @db.Uuid
+  endUser     EndUser? @relation(fields: [endUserId], references: [id], onDelete: SetNull)
+  visitorId   String   @map("visitor_id") @db.VarChar(128)
+  category    String
+  action      String
+  label       String?
+  summary     String
+  metadata    Json?
+  ipAddress   String   @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  clientTime  DateTime? @map("client_time")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([appId, createdAt])
+  @@index([visitorId, createdAt])
+  @@index([endUserId, createdAt])
+  @@index([category, action])
+  @@map("client_activity_log")
+}
+
+// ─── System user / admin operations (后台管理员操作) ───────
+
+model SystemOperationLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  adminId      String   @map("admin_id") @db.Uuid
+  admin        AdminUser @relation(fields: [adminId], references: [id])
+  adminEmail   String   @map("admin_email")
+  module       String
+  action       String
+  targetType   String   @map("target_type")
+  targetId     String   @map("target_id")
+  summary      String
+  metadata     Json?
+  ipAddress    String   @map("ip_address")
+  userAgent    String?  @map("user_agent")
+  appId        String?  @map("app_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([adminId, createdAt])
+  @@index([module, createdAt])
+  @@index([appId, createdAt])
+  @@map("system_operation_log")
+}
+
+// ─── Notifications ───────────────────────────────────────
+
+model NotificationTemplate {
+  id           String              @id @default(uuid()) @db.Uuid
+  appId        String              @map("app_id") @db.Uuid
+  app          Application         @relation(fields: [appId], references: [id])
+  name         String
+  slug         String
+  channel      NotificationChannel
+  subject      String?
+  body         String
+  variables    Json                @default("[]")
+  isActive     Boolean             @default(true) @map("is_active")
+  triggerEvent TriggerEvent?       @map("trigger_event")
+  webhookUrl   String?             @map("webhook_url")
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+
+  logs NotificationLog[]
+
+  @@unique([appId, slug])
+  @@map("notification_template")
+}
+
+model NotificationLog {
+  id           String              @id @default(uuid()) @db.Uuid
+  appId        String              @map("app_id") @db.Uuid
+  app          Application         @relation(fields: [appId], references: [id])
+  templateId   String?             @map("template_id") @db.Uuid
+  template     NotificationTemplate? @relation(fields: [templateId], references: [id])
+  userId       String?             @map("user_id") @db.Uuid
+  user         EndUser?            @relation(fields: [userId], references: [id])
+  channel      NotificationChannel
+  status       NotificationStatus  @default(queued)
+  recipient    String
+  subject      String?
+  body         String
+  errorMessage String?             @map("error_message")
+  metadata     Json?
+  sentAt       DateTime?           @map("sent_at")
+  createdAt    DateTime            @default(now()) @map("created_at")
+
+  @@index([appId, createdAt])
+  @@index([userId, createdAt])
+  @@map("notification_log")
+}

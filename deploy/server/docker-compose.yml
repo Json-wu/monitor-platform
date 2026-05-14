@@ -1,0 +1,61 @@
+# 远程服务器：拉取 ACR 镜像运行（不在此文件内 build）。
+# 用法：
+#   1) 复制 prod.env.example 为 .env 并填写
+#   2) 登录 ACR：docker login <registry-host>
+#   3) 启动：
+#        - 使用外部数据库（如阿里云 RDS）：docker compose up -d
+#        - 同机自带 Postgres：docker compose --profile db up -d
+# 镜像名与 scripts/build-push.sh / deploy/acr.env 中变量一致。
+
+name: monitor-platform
+
+services:
+  # 可选：仅在指定 --profile db 时启动；用 RDS/外部库时跳过即可
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    profiles: ["db"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-monitor}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # 默认仅容器网内可访问；如需本机 psql 调试再放开（建议绑定 127.0.0.1）
+    # ports:
+    #   - "127.0.0.1:5432:5432"
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-monitor}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    image: ${ACR_REGISTRY}/${BACKEND_IMAGE_NAME}:${IMAGE_TAG}
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_HOST_PORT:-4010}:4010"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: "4010"
+    # 同机 Postgres 时等待健康；外部库时此 depends_on 不会阻塞（postgres 未启动）
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+    command:
+      ["sh", "-c", "npx prisma migrate deploy && exec node dist/src/main.js"]
+
+  frontend:
+    image: ${ACR_REGISTRY}/${FRONTEND_IMAGE_NAME}:${IMAGE_TAG}
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_HOST_PORT:-3011}:3011"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

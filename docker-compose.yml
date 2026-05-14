@@ -1,0 +1,60 @@
+# 可选：本机一键 Postgres + 后端 + 管理前端（会同时构建/运行多容器，内存与 CPU 占用高）。
+# 若本机内存紧张，请跳过本文件，改用仓库根目录 build-acr.sh 仅构建并推送 ACR，在云上部署。
+# 若本机已在 backend/docker-compose.yml 占用 5432，请先停止该栈或改下方端口映射。
+#
+# 可选：在仓库根目录创建 .env，仅用于 compose 变量，例如：
+#   NEXT_PUBLIC_API_BASE_URL=http://localhost:4000
+name: monitor-platform
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: monitor
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d monitor"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - ./backend/.env
+    environment:
+      # 覆盖 .env 中面向宿主机开发的 localhost，使容器内连到 postgres 服务
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/monitor?schema=public
+      PORT: "4010"
+      # 浏览器访问管理端时的来源，供 CORS
+      ADMIN_ORIGIN: http://localhost:3011
+      FRONTEND_URL: http://localhost:3011
+    ports:
+      - "4000:4010"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      ["sh", "-c", "npx prisma migrate deploy && exec node dist/src/main.js"]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # 由浏览器请求宿主机上的 API（与 ports 中 4000:4010 一致）
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:4000}
+    ports:
+      - "3011:3011"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

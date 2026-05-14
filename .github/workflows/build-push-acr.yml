@@ -1,0 +1,168 @@
+name: Build & Push to ACR
+
+# 触发：推送到 main 自动跑（按改动路径决定构建哪个镜像）；也支持手动触发指定 frontend/backend/all 与 tag。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "构建目标：frontend / backend / all"
+        required: true
+        default: "all"
+        type: choice
+        options: [frontend, backend, all]
+      tag:
+        description: "镜像 tag（默认 latest）"
+        required: false
+        default: "latest"
+
+# 同分支只跑一次最新的，避免重复 push 同一镜像（不取消正在跑的，留给它正常推完）
+concurrency:
+  group: build-push-acr-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # 自动触发时按路径判断需要构建哪些镜像；workflow_dispatch 时此 job 输出被忽略
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/build-push-acr.yml'
+            backend:
+              - 'backend/**'
+              - '.github/workflows/build-push-acr.yml'
+
+  frontend:
+    name: Build & push frontend
+    needs: changes
+    if: >-
+      (github.event_name == 'push' && needs.changes.outputs.frontend == 'true') ||
+      (github.event_name == 'workflow_dispatch' && (inputs.target == 'frontend' || inputs.target == 'all'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute config
+        id: cfg
+        run: |
+          set -e
+          REG="${{ vars.ACR_REGISTRY }}"
+          if [ -z "$REG" ]; then echo "::error::repo variable ACR_REGISTRY 未设置（例：crpi-xxx.cn-shanghai.personal.cr.aliyuncs.com/your-namespace）"; exit 1; fi
+          HOST="${REG%%/*}"
+          IMG="${{ vars.FRONTEND_IMAGE_NAME }}"
+          IMG="${IMG:-monitor-admin-frontend}"
+          TAG="${{ inputs.tag }}"
+          TAG="${TAG:-latest}"
+          SHA="sha-${GITHUB_SHA::7}"
+          {
+            echo "host=$HOST"
+            echo "tags=${REG}/${IMG}:${TAG},${REG}/${IMG}:${SHA}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Login to ACR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ steps.cfg.outputs.host }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build & push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          platforms: linux/amd64
+          provenance: false
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }}
+          tags: ${{ steps.cfg.outputs.tags }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+      - name: Summary
+        run: |
+          {
+            echo "### Frontend pushed"
+            echo ""
+            echo '```'
+            echo "${{ steps.cfg.outputs.tags }}" | tr ',' '\n'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  backend:
+    name: Build & push backend
+    needs: changes
+    if: >-
+      (github.event_name == 'push' && needs.changes.outputs.backend == 'true') ||
+      (github.event_name == 'workflow_dispatch' && (inputs.target == 'backend' || inputs.target == 'all'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute config
+        id: cfg
+        run: |
+          set -e
+          REG="${{ vars.ACR_REGISTRY }}"
+          if [ -z "$REG" ]; then echo "::error::repo variable ACR_REGISTRY 未设置"; exit 1; fi
+          HOST="${REG%%/*}"
+          IMG="${{ vars.BACKEND_IMAGE_NAME }}"
+          IMG="${IMG:-monitor-admin-backend}"
+          TAG="${{ inputs.tag }}"
+          TAG="${TAG:-latest}"
+          SHA="sha-${GITHUB_SHA::7}"
+          {
+            echo "host=$HOST"
+            echo "tags=${REG}/${IMG}:${TAG},${REG}/${IMG}:${SHA}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Login to ACR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ steps.cfg.outputs.host }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build & push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          platforms: linux/amd64
+          provenance: false
+          tags: ${{ steps.cfg.outputs.tags }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Summary
+        run: |
+          {
+            echo "### Backend pushed"
+            echo ""
+            echo '```'
+            echo "${{ steps.cfg.outputs.tags }}" | tr ',' '\n'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
