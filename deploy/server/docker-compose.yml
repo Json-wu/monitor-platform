@@ -57,5 +57,22 @@ services:
     depends_on:
       - backend
 
+  # 一次性写入种子数据（角色 + 默认超管 admin@monitor.local / admin123）。
+  # 用法（首次部署后跑一次；幂等可重复）：
+  #   docker compose --profile seed run --rm seed
+  seed:
+    image: ${ACR_REGISTRY}/${BACKEND_IMAGE_NAME}:${IMAGE_TAG}
+    profiles: ["seed"]
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+    command: ["node", "dist/prisma/seed.js"]
+    restart: "no"
+
 volumes:
   pgdata:

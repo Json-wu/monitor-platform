@@ -21,6 +21,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "ts-node prisma/seed.ts",
+    "db:seed:prod": "node dist/prisma/seed.js",
     "simulate:linkmepay-notify": "ts-node prisma/scripts/simulate-linkmepay-notify.ts",
     "prisma:update-clearbg-slug": "ts-node prisma/scripts/update-clearbg-slug.ts",
     "prisma:update-clearbg-slug:sql": "prisma db execute --file prisma/scripts/update-clearbg-slug.sql",

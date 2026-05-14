@@ -8,7 +8,11 @@ COPY tsconfig*.json nest-cli.json ./
 COPY src ./src
 # Prisma 7：generate 会加载 prisma.config.ts；构建期无真实库，占位 URL 即可
 ENV DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/placeholder
-RUN npx prisma generate && npm run build
+RUN npx prisma generate && npm run build \
+ && npx tsc prisma/seed.ts \
+      --target ES2022 --module CommonJS \
+      --esModuleInterop --skipLibCheck --resolveJsonModule \
+      --outDir dist
 
 FROM node:20-alpine AS runner
 WORKDIR /app
