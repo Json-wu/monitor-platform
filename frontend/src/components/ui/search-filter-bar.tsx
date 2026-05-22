@@ -1,6 +1,6 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 
 export interface FilterOption {
   value: string;
@@ -11,6 +11,7 @@ interface SearchFilterBarProps {
   search: string;
   onSearchChange: (value: string) => void;
   onSubmit: () => void;
+  loading?: boolean;
   filters?: {
     key: string;
     label: string;
@@ -24,12 +25,14 @@ export function SearchFilterBar({
   search,
   onSearchChange,
   onSubmit,
+  loading = false,
   filters,
 }: SearchFilterBarProps) {
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
+        if (loading) return;
         onSubmit();
       }}
       className="flex flex-wrap items-stretch gap-3"
@@ -41,6 +44,7 @@ export function SearchFilterBar({
           placeholder="搜索…"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
+          disabled={loading}
         />
       </div>
       {filters?.map((f) => (
@@ -49,6 +53,7 @@ export function SearchFilterBar({
             className="input h-full"
             value={f.value}
             onChange={(e) => f.onChange(e.target.value)}
+            disabled={loading}
           >
             <option value="">{f.label}</option>
             {f.options.map((o) => (
@@ -59,8 +64,12 @@ export function SearchFilterBar({
           </select>
         </div>
       ))}
-      <button type="submit" className="btn btn-primary gap-2">
-        <Search className="h-4 w-4" />
+      <button type="submit" className="btn btn-primary gap-2" disabled={loading}>
+        {loading ? (
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+        ) : (
+          <Search className="h-4 w-4" aria-hidden />
+        )}
         搜索
       </button>
     </form>

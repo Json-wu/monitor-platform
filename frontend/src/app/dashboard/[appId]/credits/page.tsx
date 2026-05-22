@@ -5,8 +5,10 @@ import { apiGet } from "@/lib/api";
 import { useCurrentApp, type AppInfo } from "@/lib/app-context";
 import { SectionCard } from "@/components/section-card";
 import { SearchFilterBar } from "@/components/ui/search-filter-bar";
+import { useAppliedSearch } from "@/lib/use-applied-search";
 import { Pagination } from "@/components/ui/pagination";
 import { creditTransactionReasonZh } from "@/lib/credit-transaction-label";
+import { useShowApiError } from "@/lib/show-api-error";
 
 interface Transaction {
   id: string;
@@ -48,10 +50,10 @@ function CreditsPageInner({ app }: { app: AppInfo }) {
   const [rows, setRows] = useState<Transaction[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
+  const { searchDraft, setSearchDraft, appliedSearch, applySearch } = useAppliedSearch();
   const [typeFilter, setTypeFilter] = useState("");
-  const [error, setError] = useState("");
   const [limit, setLimit] = useState(10);
+  const showApiError = useShowApiError();
 
   const load = useCallback(async () => {
     try {
@@ -62,9 +64,9 @@ function CreditsPageInner({ app }: { app: AppInfo }) {
       setRows(res.data);
       setTotal(res.total);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "加载失败");
+      showApiError(err);
     }
-  }, [page, typeFilter, limit, app.id]);
+  }, [page, typeFilter, limit, app.id, showApiError]);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -73,9 +75,9 @@ function CreditsPageInner({ app }: { app: AppInfo }) {
     return () => window.clearTimeout(t);
   }, [load]);
 
-  const filtered = search
+  const filtered = appliedSearch
     ? rows.filter((r) => {
-        const q = search.toLowerCase();
+        const q = appliedSearch.toLowerCase();
         const raw = r.reason.toLowerCase();
         const zh = creditTransactionReasonZh(r.reason).toLowerCase();
         const email = r.account?.user?.email?.toLowerCase() ?? "";
@@ -89,6 +91,11 @@ function CreditsPageInner({ app }: { app: AppInfo }) {
       })
     : rows;
 
+  function handleSearchSubmit() {
+    applySearch();
+    setPage(1);
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -98,12 +105,10 @@ function CreditsPageInner({ app }: { app: AppInfo }) {
         </p>
       </div>
 
-      {error ? <div className="card p-4 text-sm text-red-400">{error}</div> : null}
-
       <SearchFilterBar
-        search={search}
-        onSearchChange={setSearch}
-        onSubmit={() => setPage(1)}
+        search={searchDraft}
+        onSearchChange={setSearchDraft}
+        onSubmit={handleSearchSubmit}
         filters={[
           {
             key: "type",

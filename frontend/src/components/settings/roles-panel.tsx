@@ -7,6 +7,7 @@ import { SectionCard } from "@/components/section-card";
 import { Modal } from "@/components/ui/modal";
 import { FormField } from "@/components/ui/form-field";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useShowApiError } from "@/lib/show-api-error";
 
 interface Role {
   id: string;
@@ -62,7 +63,7 @@ const emptyForm = { name: "", displayName: "", permissions: {} as Record<string,
 
 export function RolesSettingsPanel() {
   const [roles, setRoles] = useState<Role[]>([]);
-  const [error, setError] = useState("");
+  const showApiError = useShowApiError();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Role | null>(null);
@@ -76,9 +77,9 @@ export function RolesSettingsPanel() {
       const res = await apiGet<{ data: Role[] }>("/roles");
       setRoles(res.data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "加载失败");
+      showApiError(err);
     }
-  }, []);
+  }, [showApiError]);
 
   useEffect(() => {
     load();
@@ -139,7 +140,7 @@ export function RolesSettingsPanel() {
       setModalOpen(false);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "保存失败");
+      showApiError(err);
     } finally {
       setSaving(false);
     }
@@ -152,7 +153,7 @@ export function RolesSettingsPanel() {
       setDeleteTarget(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "删除失败");
+      showApiError(err);
     }
   }
 
@@ -164,8 +165,6 @@ export function RolesSettingsPanel() {
           定义角色并按模块配置细粒度权限。
         </p>
       </div>
-
-      {error ? <div className="card p-4 text-sm text-red-400">{error}</div> : null}
 
       <SectionCard title="角色" description={`共 ${roles.length} 个`}>
         <div className="mb-4 flex justify-end">

@@ -111,8 +111,54 @@ export class AppRegistryService {
 
   async remove(id: string) {
     await this.requireApplication(id);
-    const deleted = await this.prisma.application.delete({ where: { id } });
-    return sanitizeApplicationForApiResponse(deleted);
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.creditTransaction.deleteMany({ where: { appId: id } });
+        await tx.notificationLog.deleteMany({ where: { appId: id } });
+        await tx.subscription.deleteMany({ where: { appId: id } });
+        await tx.order.deleteMany({ where: { appId: id } });
+        await tx.creditAccount.deleteMany({ where: { appId: id } });
+        await tx.endUserAuditLog.deleteMany({ where: { appId: id } });
+        await tx.clientActivityLog.deleteMany({ where: { appId: id } });
+        await tx.clearbgAnonymousDailyUsage.deleteMany({ where: { appId: id } });
+        await tx.emailVerificationCode.deleteMany({ where: { appId: id } });
+        await tx.endUser.updateMany({ where: { appId: id }, data: { planId: null } });
+        await tx.endUser.deleteMany({ where: { appId: id } });
+        await tx.notificationTemplate.deleteMany({ where: { appId: id } });
+        await tx.coupon.deleteMany({ where: { appId: id } });
+        await tx.pricingPlan.deleteMany({ where: { appId: id } });
+        await tx.systemOperationLog.updateMany({
+          where: { appId: id },
+          data: { appId: null },
+        });
+
+        const admins = await tx.adminUser.findMany({
+          where: { allowedApps: { has: id } },
+          select: { id: true, allowedApps: true },
+        });
+        for (const admin of admins) {
+          await tx.adminUser.update({
+            where: { id: admin.id },
+            data: {
+              allowedApps: admin.allowedApps.filter((appId) => appId !== id),
+            },
+          });
+        }
+
+        await tx.application.delete({ where: { id } });
+      });
+      return { message: 'Application deleted successfully' };
+    } catch (e) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        (e.code === 'P2003' || e.code === 'P2014')
+      ) {
+        throw new BadRequestException(
+          '无法删除该应用：仍存在未清理的关联数据，请先删除用户、订单等相关记录后再试。',
+        );
+      }
+      throw e;
+    }
   }
 
   async rotateApiKey(id: string) {

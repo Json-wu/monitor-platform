@@ -5,7 +5,9 @@ import { apiGetScoped } from "@/lib/api";
 import { useCurrentApp } from "@/lib/app-context";
 import { SectionCard } from "@/components/section-card";
 import { SearchFilterBar } from "@/components/ui/search-filter-bar";
+import { useAppliedSearch } from "@/lib/use-applied-search";
 import { Pagination } from "@/components/ui/pagination";
+import { useShowApiError } from "@/lib/show-api-error";
 
 interface EndUserAuditRow {
   id: string;
@@ -44,9 +46,9 @@ export default function LogsPage() {
   const [sitePage, setSitePage] = useState(1);
   const [catFilter, setCatFilter] = useState("");
 
-  const [search, setSearch] = useState("");
-  const [error, setError] = useState("");
+  const { searchDraft, setSearchDraft, appliedSearch, applySearch } = useAppliedSearch();
   const [limit, setLimit] = useState(10);
+  const showApiError = useShowApiError();
 
   const loadCrm = useCallback(async () => {
     try {
@@ -56,9 +58,9 @@ export default function LogsPage() {
       setLogs(res.data);
       setTotal(res.total);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "加载失败");
+      showApiError(err);
     }
-  }, [app.id, page, moduleFilter, limit]);
+  }, [app.id, page, moduleFilter, limit, showApiError]);
 
   const loadSite = useCallback(async () => {
     try {
@@ -68,13 +70,12 @@ export default function LogsPage() {
       setSiteLogs(res.data);
       setSiteTotal(res.total);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "加载站点日志失败");
+      showApiError(err);
     }
-  }, [app.id, sitePage, catFilter, limit]);
+  }, [app.id, sitePage, catFilter, limit, showApiError]);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
-      setError("");
       if (source === "crm") void loadCrm();
       else void loadSite();
     }, 0);
@@ -83,23 +84,29 @@ export default function LogsPage() {
 
   const filtered =
     source === "crm"
-      ? search
+      ? appliedSearch
         ? logs.filter(
             (l) =>
-              l.summary.toLowerCase().includes(search.toLowerCase()) ||
-              l.endUser.email.toLowerCase().includes(search.toLowerCase()) ||
-              (l.actorAdminEmail && l.actorAdminEmail.toLowerCase().includes(search.toLowerCase())),
+              l.summary.toLowerCase().includes(appliedSearch.toLowerCase()) ||
+              l.endUser.email.toLowerCase().includes(appliedSearch.toLowerCase()) ||
+              (l.actorAdminEmail && l.actorAdminEmail.toLowerCase().includes(appliedSearch.toLowerCase())),
           )
         : logs
-      : search
+      : appliedSearch
         ? siteLogs.filter(
             (l) =>
-              l.summary.toLowerCase().includes(search.toLowerCase()) ||
-              l.visitorId.toLowerCase().includes(search.toLowerCase()) ||
-              l.action.toLowerCase().includes(search.toLowerCase()) ||
-              (l.endUser?.email && l.endUser.email.toLowerCase().includes(search.toLowerCase())),
+              l.summary.toLowerCase().includes(appliedSearch.toLowerCase()) ||
+              l.visitorId.toLowerCase().includes(appliedSearch.toLowerCase()) ||
+              l.action.toLowerCase().includes(appliedSearch.toLowerCase()) ||
+              (l.endUser?.email && l.endUser.email.toLowerCase().includes(appliedSearch.toLowerCase())),
           )
         : siteLogs;
+
+  function handleSearchSubmit() {
+    applySearch();
+    setPage(1);
+    setSitePage(1);
+  }
 
   const moduleOptions = [
     { value: "users", label: "用户" },
@@ -152,15 +159,10 @@ export default function LogsPage() {
         </button>
       </div>
 
-      {error ? <div className="card p-4 text-sm text-red-400">{error}</div> : null}
-
       <SearchFilterBar
-        search={search}
-        onSearchChange={setSearch}
-        onSubmit={() => {
-          setPage(1);
-          setSitePage(1);
-        }}
+        search={searchDraft}
+        onSearchChange={setSearchDraft}
+        onSubmit={handleSearchSubmit}
         filters={
           source === "crm"
             ? [

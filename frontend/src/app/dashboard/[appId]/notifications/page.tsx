@@ -7,8 +7,10 @@ import { useCurrentApp } from "@/lib/app-context";
 import { SectionCard } from "@/components/section-card";
 import { Modal } from "@/components/ui/modal";
 import { FormField } from "@/components/ui/form-field";
+import { Tips } from "@/components/ui/tips";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Pagination } from "@/components/ui/pagination";
+import { useShowApiError } from "@/lib/show-api-error";
 
 interface Template {
   id: string;
@@ -92,7 +94,7 @@ export default function NotificationsPage() {
   const [logTotal, setLogTotal] = useState(0);
   const [logPage, setLogPage] = useState(1);
 
-  const [error, setError] = useState("");
+  const showApiError = useShowApiError();
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingTpl, setEditingTpl] = useState<Template | null>(null);
@@ -115,9 +117,9 @@ export default function NotificationsPage() {
       setTemplates(res.data ?? []);
       setTplTotal(res.total);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "加载失败");
+      showApiError(err);
     }
-  }, [app.id, tplPage, limit]);
+  }, [app.id, tplPage, limit, showApiError]);
 
   const loadLogs = useCallback(async () => {
     try {
@@ -127,9 +129,9 @@ export default function NotificationsPage() {
       setLogs(res.data ?? []);
       setLogTotal(res.total);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "加载失败");
+      showApiError(err);
     }
-  }, [app.id, logPage, limit]);
+  }, [app.id, logPage, limit, showApiError]);
 
   useEffect(() => {
     if (tab === "templates") loadTemplates();
@@ -175,7 +177,7 @@ export default function NotificationsPage() {
       setEditorOpen(false);
       await loadTemplates();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "保存失败");
+      showApiError(err);
     } finally {
       setSaving(false);
     }
@@ -186,7 +188,7 @@ export default function NotificationsPage() {
       await apiPut(`/notifications/templates/${t.id}`, { isActive: !t.isActive });
       await loadTemplates();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "操作失败");
+      showApiError(err);
     }
   }
 
@@ -197,7 +199,7 @@ export default function NotificationsPage() {
       setDeleteTarget(null);
       await loadTemplates();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "删除失败");
+      showApiError(err);
     }
   }
 
@@ -216,7 +218,7 @@ export default function NotificationsPage() {
       });
       setTestResult(`已发送：${result.sent}，状态：${result.status ?? "sent"}`);
     } catch (err) {
-      setTestResult(`错误：${err instanceof Error ? err.message : "失败"}`);
+      showApiError(err);
     } finally {
       setSaving(false);
     }
@@ -233,13 +235,13 @@ export default function NotificationsPage() {
           <p className="mt-2 text-sm text-muted-foreground">
             管理「{app.name}」的通知模板与发送记录。
           </p>
-          <p className="mt-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          <Tips className="mt-2">
             <strong className="text-foreground">注册验证码邮件</strong>：模板请使用 Channel=Email、Slug=
             <code className="rounded bg-muted px-1">register_email_verification</code>
             ，正文占位符{" "}
             <code className="rounded bg-muted px-1">{"{{code}} {{email}} {{appName}} {{expiryMinutes}}"}</code>
             。发信 SMTP 在「集成」页配置，全站共用（表 global_integration_setting，name=smtp；非环境变量）；本页不再提供 Integrations 表单入口。
-          </p>
+          </Tips>
         </div>
       </div>
 
@@ -257,8 +259,6 @@ export default function NotificationsPage() {
           </button>
         ))}
       </div>
-
-      {error ? <div className="card p-4 text-sm text-red-400">{error}</div> : null}
 
       {tab === "templates" ? (
         <SectionCard title="模板" description={`共 ${tplTotal} 个`}>
@@ -462,7 +462,7 @@ export default function NotificationsPage() {
           。
         </p>
         {testResult ? (
-          <div className={`card mb-4 p-3 text-sm ${testResult.startsWith("错误") ? "text-red-400" : "text-green-400"}`}>
+          <div className="card mb-4 p-3 text-sm text-green-400">
             {testResult}
           </div>
         ) : null}

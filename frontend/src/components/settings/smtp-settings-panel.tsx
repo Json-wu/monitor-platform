@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Mail } from "lucide-react";
 import { apiGet, apiPatch } from "@/lib/api";
 import { SectionCard } from "@/components/section-card";
 import { FormField } from "@/components/ui/form-field";
+import { Tips } from "@/components/ui/tips";
+import { useShowApiError } from "@/lib/show-api-error";
 
 type SmtpSettings = {
   enabled: boolean;
@@ -29,8 +30,8 @@ export function SmtpSettingsPanel({
 }: SmtpSettingsPanelProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const showApiError = useShowApiError();
 
   const [enabled, setEnabled] = useState(true);
   const [host, setHost] = useState("");
@@ -42,7 +43,6 @@ export function SmtpSettingsPanel({
   const [tlsRejectUnauthorized, setTlsRejectUnauthorized] = useState(true);
 
   const load = useCallback(async () => {
-    setError("");
     setLoading(true);
     try {
       const s = await apiGet<SmtpSettings>(`/apps/${appId}/smtp-settings`);
@@ -55,11 +55,11 @@ export function SmtpSettingsPanel({
       setTlsRejectUnauthorized(s.tlsRejectUnauthorized !== false);
       setPassNew("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "加载失败");
+      showApiError(e);
     } finally {
       setLoading(false);
     }
-  }, [appId]);
+  }, [appId, showApiError]);
 
   useEffect(() => {
     void load();
@@ -68,7 +68,6 @@ export function SmtpSettingsPanel({
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    setError("");
     setSaved(false);
     try {
       const body: Record<string, unknown> = {
@@ -88,7 +87,7 @@ export function SmtpSettingsPanel({
       await load();
       onSaved?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "保存失败");
+      showApiError(err);
     } finally {
       setSaving(false);
     }
@@ -109,11 +108,6 @@ export function SmtpSettingsPanel({
         </div>
       ) : null}
 
-      {error ? (
-        <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-          {error}
-        </div>
-      ) : null}
       {saved ? (
         <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
           已保存。
@@ -122,7 +116,7 @@ export function SmtpSettingsPanel({
 
       <SectionCard
         title="SMTP 服务器"
-        description="与常见邮件服务商（SendGrid、企业邮箱等）配置一致。"
+        tips="与常见邮件服务商（SendGrid、企业邮箱等）配置一致。"
       >
         <form onSubmit={handleSave} className="max-w-xl space-y-4">
           <label className="flex cursor-pointer items-center gap-2 text-sm">
@@ -201,11 +195,11 @@ export function SmtpSettingsPanel({
       </SectionCard>
 
       {variant === "page" ? (
-        <SectionCard title="说明" description="通知模板、验证码邮件均依赖此处配置。">
-          <div className="flex items-start gap-2 text-sm text-muted-foreground">
-            <Mail className="mt-0.5 h-4 w-4 shrink-0" />
+        <SectionCard title="说明">
+          <Tips>
+            <p>通知模板、验证码邮件均依赖此处配置。</p>
             <p>关闭「启用 SMTP」后，生产环境发信将失败；开发环境可能仅打日志。</p>
-          </div>
+          </Tips>
         </SectionCard>
       ) : null}
     </div>

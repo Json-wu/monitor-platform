@@ -5,7 +5,9 @@ import { apiGet } from "@/lib/api";
 import { useCurrentApp, type AppInfo } from "@/lib/app-context";
 import { SectionCard } from "@/components/section-card";
 import { SearchFilterBar } from "@/components/ui/search-filter-bar";
+import { useAppliedSearch } from "@/lib/use-applied-search";
 import { Pagination } from "@/components/ui/pagination";
+import { useShowApiError } from "@/lib/show-api-error";
 
 interface Order {
   id: string;
@@ -47,10 +49,10 @@ function OrdersPageInner({ app }: { app: AppInfo }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
+  const { searchDraft, setSearchDraft, appliedSearch, applySearch } = useAppliedSearch();
   const [statusFilter, setStatusFilter] = useState("");
-  const [error, setError] = useState("");
   const [limit, setLimit] = useState(10);
+  const showApiError = useShowApiError();
 
   const load = useCallback(async () => {
     try {
@@ -61,9 +63,9 @@ function OrdersPageInner({ app }: { app: AppInfo }) {
       setOrders(res.data);
       setTotal(res.total);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "加载失败");
+      showApiError(err);
     }
-  }, [page, statusFilter, limit, app.id]);
+  }, [page, statusFilter, limit, app.id, showApiError]);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -72,9 +74,9 @@ function OrdersPageInner({ app }: { app: AppInfo }) {
     return () => window.clearTimeout(t);
   }, [load]);
 
-  const filtered = search
+  const filtered = appliedSearch
     ? orders.filter((o) => {
-        const q = search.toLowerCase();
+        const q = appliedSearch.toLowerCase();
         const no = o.orderNo.toLowerCase();
         const email = o.user?.email?.toLowerCase() ?? "";
         const name = o.user?.name?.toLowerCase() ?? "";
@@ -86,6 +88,11 @@ function OrdersPageInner({ app }: { app: AppInfo }) {
       })
     : orders;
 
+  function handleSearchSubmit() {
+    applySearch();
+    setPage(1);
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -95,12 +102,10 @@ function OrdersPageInner({ app }: { app: AppInfo }) {
         </p>
       </div>
 
-      {error ? <div className="card p-4 text-sm text-red-400">{error}</div> : null}
-
       <SearchFilterBar
-        search={search}
-        onSearchChange={setSearch}
-        onSubmit={() => setPage(1)}
+        search={searchDraft}
+        onSearchChange={setSearchDraft}
+        onSubmit={handleSearchSubmit}
         filters={[
           {
             key: "status",

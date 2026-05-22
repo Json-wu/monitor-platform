@@ -5,6 +5,8 @@ import { Plug } from "lucide-react";
 import { apiGet, apiPatch } from "@/lib/api";
 import { SectionCard } from "@/components/section-card";
 import { FormField } from "@/components/ui/form-field";
+import { Tips } from "@/components/ui/tips";
+import { useShowApiError } from "@/lib/show-api-error";
 
 type UpscaleSettings = {
   enabled: boolean;
@@ -43,8 +45,8 @@ export function UpscaleSettingsPanel({
 }: UpscaleSettingsPanelProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const showApiError = useShowApiError();
 
   const [enabled, setEnabled] = useState(false);
   const [apiTokenNew, setApiTokenNew] = useState("");
@@ -67,7 +69,6 @@ export function UpscaleSettingsPanel({
   const [ddDefaultModelSize, setDdDefaultModelSize] = useState<"large" | "tiny">("large");
 
   const load = useCallback(async () => {
-    setError("");
     setLoading(true);
     try {
       const u = await apiGet<UpscaleSettings>(`/apps/${appId}/integrations/replicate`);
@@ -88,11 +89,11 @@ export function UpscaleSettingsPanel({
       setApiTokenNew("");
       setDdApiTokenNew("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "加载失败");
+      showApiError(e);
     } finally {
       setLoading(false);
     }
-  }, [appId]);
+  }, [appId, showApiError]);
 
   useEffect(() => {
     void load();
@@ -101,7 +102,6 @@ export function UpscaleSettingsPanel({
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    setError("");
     setSaved(false);
     try {
       const body: Record<string, unknown> = { enabled, defaultType };
@@ -112,7 +112,7 @@ export function UpscaleSettingsPanel({
       await load();
       onSaved?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "保存失败");
+      showApiError(err);
     } finally {
       setSaving(false);
     }
@@ -121,14 +121,13 @@ export function UpscaleSettingsPanel({
   async function handleClearToken() {
     if (!confirm("确定清空已保存的 API Token？")) return;
     setSaving(true);
-    setError("");
     try {
       await apiPatch(`/apps/${appId}/integrations/replicate`, { apiToken: "" });
       setSaved(true);
       await load();
       onSaved?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "操作失败");
+      showApiError(err);
     } finally {
       setSaving(false);
     }
@@ -137,7 +136,6 @@ export function UpscaleSettingsPanel({
   async function handleSaveDdcolor(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    setError("");
     setSaved(false);
     try {
       const body: Record<string, unknown> = {
@@ -154,7 +152,7 @@ export function UpscaleSettingsPanel({
       await load();
       onSaved?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "保存失败");
+      showApiError(err);
     } finally {
       setSaving(false);
     }
@@ -163,14 +161,13 @@ export function UpscaleSettingsPanel({
   async function handleClearDdToken() {
     if (!confirm("确定清空已保存的 DDColor API Token？")) return;
     setSaving(true);
-    setError("");
     try {
       await apiPatch(`/apps/${appId}/integrations/replicate`, { apiToken: "" });
       setSaved(true);
       await load();
       onSaved?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "操作失败");
+      showApiError(err);
     } finally {
       setSaving(false);
     }
@@ -179,7 +176,6 @@ export function UpscaleSettingsPanel({
   async function handleSaveModels(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    setError("");
     setSaved(false);
     try {
       await apiPatch(`/apps/${appId}/integrations/replicate`, {
@@ -193,7 +189,7 @@ export function UpscaleSettingsPanel({
       setSaved(true);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "保存失败");
+      showApiError(err);
     } finally {
       setSaving(false);
     }
@@ -219,11 +215,6 @@ export function UpscaleSettingsPanel({
         </div>
       ) : null}
 
-      {error ? (
-        <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-          {error}
-        </div>
-      ) : null}
       {saved ? (
         <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
           已保存。
@@ -233,7 +224,7 @@ export function UpscaleSettingsPanel({
       {/* ── 凭证 & 全局开关 ── */}
       <SectionCard
         title="Replicate API 凭证"
-        description="在 replicate.com 获取 API Token（r8_ 开头）。Token 仅存服务端，接口不返回明文。"
+        tips="在 replicate.com 获取 API Token（r8_ 开头）。Token 仅存服务端，接口不返回明文。"
       >
         <form onSubmit={handleSave} className="max-w-xl space-y-4">
           <FormField
@@ -292,7 +283,7 @@ export function UpscaleSettingsPanel({
       {/* ── 模型引用配置 ── */}
       <SectionCard
         title="模型引用"
-        description="格式为 owner/name 或 owner/name:version（64 位十六进制）。留空恢复内置默认值。"
+        tips="格式为 owner/name 或 owner/name:version（64 位十六进制）。留空恢复内置默认值。"
       >
         <form onSubmit={handleSaveModels} className="max-w-xl space-y-4">
           <FormField
@@ -376,7 +367,7 @@ export function UpscaleSettingsPanel({
       {/* ── 公开接口说明 ── */}
       <SectionCard
         title="公开接口（应用鉴权 + 积分）"
-        description="Header X-App-Key（应用 API Key）必填。可选 X-User-Id 或 X-Api-Key：识别到用户时 colorize 每次扣 1 分，unblur 为 standard 扣 1 分/次、strong 扣 3 分/次，inpainting 每次扣 1 分，pro-headshot 按 outputs=1/2/4 扣同等积分；失败按实际扣分退回。未识别时与其它公开消费级接口相同规则：同一应用、同一 IP 每 UTC 日共 1 次免费。"
+        tips="Header X-App-Key（应用 API Key）必填。可选 X-User-Id 或 X-Api-Key：识别到用户时 colorize 每次扣 1 分，unblur 为 standard 扣 1 分/次、strong 扣 3 分/次，inpainting 每次扣 1 分，pro-headshot 按 outputs=1/2/4 扣同等积分；失败按实际扣分退回。未识别时与其它公开消费级接口相同规则：同一应用、同一 IP 每 UTC 日共 1 次免费。"
       >
         <div className="space-y-3 text-sm">
           <div className="flex items-start gap-2 rounded-lg bg-muted/40 px-3 py-2 font-mono text-xs break-all">
@@ -492,16 +483,21 @@ export function UpscaleSettingsPanel({
               <span className="text-muted-foreground ml-2">仅 pro-headshot 返回，值为结果图 URL 数组</span>
             </div>
           </div>
-          <div className="rounded-lg bg-muted/40 px-3 py-2 text-xs space-y-2">
-            <div className="text-muted-foreground font-medium">自动路由规则（type=auto）</div>
-            <div className="space-y-1 text-muted-foreground">
+          <Tips title="自动路由规则（type=auto）">
+            <div className="space-y-1">
               <div>① 调用 BLIP 图像描述模型分析图片内容</div>
-              <div>② Caption 含 <span className="font-mono text-foreground">anime / cartoon / manga</span> 等 → psychic-canvas/anime-upscaler</div>
-              <div>③ Caption 含 <span className="font-mono text-foreground">person / face / portrait</span> 等 → sczhou/codeformer（upscale×2）</div>
+              <div>
+                ② Caption 含 <span className="font-mono text-foreground">anime / cartoon / manga</span> 等 →
+                psychic-canvas/anime-upscaler
+              </div>
+              <div>
+                ③ Caption 含 <span className="font-mono text-foreground">person / face / portrait</span> 等 →
+                sczhou/codeformer（upscale×2）
+              </div>
               <div>④ 其他 / BLIP 失败 → xinntao/real-esrgan（scale×4）</div>
             </div>
-          </div>
-          <p className="text-xs text-muted-foreground leading-relaxed">
+          </Tips>
+          <Tips>
             模型文档：{" "}
             <a
               className="text-primary underline"
@@ -529,14 +525,14 @@ export function UpscaleSettingsPanel({
             >
               psychic-canvas/anime-upscaler
             </a>
-          </p>
+          </Tips>
         </div>
       </SectionCard>
 
       {/* ── DDColor（并入本页） ── */}
       <SectionCard
         title="DDColor 上色（已并入）"
-        description="上色能力已并入本页管理：配置项与超分共用 /integrations/replicate，调用接口为 /api/v1/colorize。"
+        tips="上色能力已并入本页管理：配置项与超分共用 /integrations/replicate，调用接口为 /api/v1/colorize。"
       >
         <form onSubmit={handleSaveDdcolor} className="max-w-xl space-y-4">
           <FormField

@@ -5,10 +5,12 @@ import { Key, Pencil, Plus, Power, Trash2 } from "lucide-react";
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api";
 import { SectionCard } from "@/components/section-card";
 import { SearchFilterBar } from "@/components/ui/search-filter-bar";
+import { useAppliedSearch, useSearchLoading } from "@/lib/use-applied-search";
 import { Pagination } from "@/components/ui/pagination";
 import { Modal } from "@/components/ui/modal";
 import { FormField } from "@/components/ui/form-field";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useShowApiError } from "@/lib/show-api-error";
 
 interface AdminUser {
   id: string;
@@ -37,14 +39,16 @@ interface App {
 const emptyForm = { email: "", name: "", password: "", roleId: "", allowedApps: [] as string[] };
 
 export function AdminsSettingsPanel() {
+  const showApiError = useShowApiError();
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [apps, setApps] = useState<App[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
-  const [search, setSearch] = useState("");
-  const [error, setError] = useState("");
+  const { searchDraft, setSearchDraft, appliedSearch, searchToken, applySearch } =
+    useAppliedSearch();
+  const { searchLoading, startSearchLoad, finishSearchLoad } = useSearchLoading();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<AdminUser | null>(null);
@@ -59,7 +63,7 @@ export function AdminsSettingsPanel() {
     try {
       const [a, r, ap] = await Promise.all([
         apiGet<{ data: AdminUser[]; total: number }>(
-          `/admins?page=${page}&limit=${limit}${search ? `&search=${encodeURIComponent(search)}` : ""}`,
+          `/admins?page=${page}&limit=${limit}${appliedSearch ? `&search=${encodeURIComponent(appliedSearch)}` : ""}`,
         ),
         apiGet<{ data: Role[] }>("/roles"),
         apiGet<{ data: App[] }>("/apps"),
@@ -69,13 +73,21 @@ export function AdminsSettingsPanel() {
       setRoles(r.data);
       setApps(ap.data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "加载失败");
+      showApiError(err);
+    } finally {
+      finishSearchLoad();
     }
-  }, [page, search, limit]);
+  }, [page, appliedSearch, searchToken, limit, showApiError, finishSearchLoad]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  function handleSearchSubmit() {
+    startSearchLoad();
+    applySearch();
+    setPage(1);
+  }
 
   function openCreate() {
     setEditing(null);
@@ -110,7 +122,7 @@ export function AdminsSettingsPanel() {
       setModalOpen(false);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "保存失败");
+      showApiError(err);
     } finally {
       setSaving(false);
     }
@@ -121,7 +133,7 @@ export function AdminsSettingsPanel() {
       await apiPut(`/admins/${a.id}`, { isActive: !a.isActive });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "操作失败");
+      showApiError(err);
     }
   }
 
@@ -132,7 +144,7 @@ export function AdminsSettingsPanel() {
       setDeleteTarget(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "删除失败");
+      showApiError(err);
     }
   }
 
@@ -144,7 +156,7 @@ export function AdminsSettingsPanel() {
       setPwdTarget(null);
       setNewPassword("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "重置密码失败");
+      showApiError(err);
     } finally {
       setSaving(false);
     }
@@ -168,9 +180,12 @@ export function AdminsSettingsPanel() {
         </p>
       </div>
 
-      {error ? <div className="card p-4 text-sm text-red-400">{error}</div> : null}
-
-      <SearchFilterBar search={search} onSearchChange={setSearch} onSubmit={() => setPage(1)} />
+      <SearchFilterBar
+        search={searchDraft}
+        onSearchChange={setSearchDraft}
+        onSubmit={handleSearchSubmit}
+        loading={searchLoading}
+      />
 
       <SectionCard title="管理员" description={`共 ${total} 人`}>
         <div className="mb-4 flex justify-end">

@@ -6,9 +6,11 @@ import { apiGet, apiPut, apiPostScoped } from "@/lib/api";
 import { useCurrentApp } from "@/lib/app-context";
 import { SectionCard } from "@/components/section-card";
 import { SearchFilterBar } from "@/components/ui/search-filter-bar";
+import { useAppliedSearch, useSearchLoading } from "@/lib/use-applied-search";
 import { Pagination } from "@/components/ui/pagination";
 import { Modal } from "@/components/ui/modal";
 import { FormField } from "@/components/ui/form-field";
+import { useShowApiError } from "@/lib/show-api-error";
 
 interface User {
   id: string;
@@ -67,9 +69,11 @@ export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
+  const { searchDraft, setSearchDraft, appliedSearch, searchToken, applySearch } =
+    useAppliedSearch();
+  const { searchLoading, startSearchLoad, finishSearchLoad } = useSearchLoading();
   const [statusFilter, setStatusFilter] = useState("");
-  const [error, setError] = useState("");
+  const showApiError = useShowApiError();
 
   const [editUser, setEditUser] = useState<User | null>(null);
   const [editForm, setEditForm] = useState({ name: "", phone: "", status: "", notes: "" });
@@ -83,20 +87,28 @@ export default function UsersPage() {
   const loadUsers = useCallback(async () => {
     try {
       let path = `/users?page=${page}&limit=${limit}`;
-      if (search) path += `&search=${encodeURIComponent(search)}`;
+      if (appliedSearch) path += `&search=${encodeURIComponent(appliedSearch)}`;
       if (statusFilter) path += `&status=${statusFilter}`;
       path += `&appId=${encodeURIComponent(app.id)}`;
       const res = await apiGet<{ data: User[]; total: number }>(path);
       setUsers(res.data);
       setTotal(res.total);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "加载失败");
+      showApiError(err);
+    } finally {
+      finishSearchLoad();
     }
-  }, [page, search, statusFilter, limit, app.id]);
+  }, [page, appliedSearch, searchToken, statusFilter, limit, app.id, finishSearchLoad, showApiError]);
 
   useEffect(() => {
     void loadUsers();
   }, [loadUsers]);
+
+  function handleSearchSubmit() {
+    startSearchLoad();
+    applySearch();
+    setPage(1);
+  }
 
   function openEdit(u: User) {
     setEditUser(u);
@@ -111,7 +123,7 @@ export default function UsersPage() {
       setEditUser(null);
       await loadUsers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "更新失败");
+      showApiError(err);
     } finally {
       setSaving(false);
     }
@@ -123,7 +135,7 @@ export default function UsersPage() {
       await apiPut(`/users/${u.id}`, { status: newStatus });
       await loadUsers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "操作失败");
+      showApiError(err);
     }
   }
 
@@ -141,7 +153,7 @@ export default function UsersPage() {
       setCreditForm({ amount: "", creditType: "subscription", reason: "" });
       await loadUsers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "发放失败");
+      showApiError(err);
     } finally {
       setSaving(false);
     }
@@ -156,12 +168,11 @@ export default function UsersPage() {
         </p>
       </div>
 
-      {error ? <div className="card p-4 text-sm text-red-400">{error}</div> : null}
-
       <SearchFilterBar
-        search={search}
-        onSearchChange={setSearch}
-        onSubmit={() => setPage(1)}
+        search={searchDraft}
+        onSearchChange={setSearchDraft}
+        onSubmit={handleSearchSubmit}
+        loading={searchLoading}
         filters={[
           {
             key: "status",

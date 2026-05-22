@@ -5,6 +5,8 @@ import { Plug } from "lucide-react";
 import { apiGet, apiPatch } from "@/lib/api";
 import { SectionCard } from "@/components/section-card";
 import { FormField } from "@/components/ui/form-field";
+import { Tips } from "@/components/ui/tips";
+import { useShowApiError } from "@/lib/show-api-error";
 
 type RbSettings = {
   url: string;
@@ -35,8 +37,8 @@ export function RemoveBgApiPanel({
 }: RemoveBgApiPanelProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const showApiError = useShowApiError();
 
   const [url, setUrl] = useState("");
   const [authUser, setAuthUser] = useState("");
@@ -45,7 +47,6 @@ export function RemoveBgApiPanel({
   const [authPassSet, setAuthPassSet] = useState(false);
 
   const load = useCallback(async () => {
-    setError("");
     setLoading(true);
     try {
       const rb = await apiGet<RbSettings>(`/apps/${appId}/clearbg-settings`);
@@ -55,11 +56,11 @@ export function RemoveBgApiPanel({
       setAuthPassSet(rb.authPassSet);
       setAuthPassNew("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "加载失败");
+      showApiError(e);
     } finally {
       setLoading(false);
     }
-  }, [appId]);
+  }, [appId, showApiError]);
 
   useEffect(() => {
     load();
@@ -68,7 +69,6 @@ export function RemoveBgApiPanel({
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    setError("");
     setSaved(false);
     try {
       const body: Record<string, unknown> = {
@@ -85,7 +85,7 @@ export function RemoveBgApiPanel({
       await load();
       onSaved?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "保存失败");
+      showApiError(err);
     } finally {
       setSaving(false);
     }
@@ -94,14 +94,13 @@ export function RemoveBgApiPanel({
   async function handleClearPassword() {
     if (!confirm("确定清除已保存的第三方 API 密码？")) return;
     setSaving(true);
-    setError("");
     try {
       await apiPatch(`/apps/${appId}/clearbg-settings`, { authPass: "" });
       setSaved(true);
       await load();
       onSaved?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "操作失败");
+      showApiError(err);
     } finally {
       setSaving(false);
     }
@@ -126,11 +125,6 @@ export function RemoveBgApiPanel({
         </div>
       ) : null}
 
-      {error ? (
-        <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-          {error}
-        </div>
-      ) : null}
       {saved ? (
         <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
           已保存。
@@ -139,7 +133,7 @@ export function RemoveBgApiPanel({
 
       <SectionCard
         title="上游服务"
-        description="与 Pixian 示例一致：POST multipart，字段名为 image；可选 HTTP Basic 认证。"
+        tips="与 Pixian 示例一致：POST multipart，字段名为 image；可选 HTTP Basic 认证。"
       >
         <form onSubmit={handleSave} className="max-w-xl space-y-4">
           <FormField label="API 地址" hint="例如 https://api.pixian.ai/api/v2/remove-background">
@@ -203,7 +197,7 @@ export function RemoveBgApiPanel({
 
       <SectionCard
         title="前端对接"
-        description="公开抠图接口为 POST /api/v1/clearbg（应用 slug 为 clearbg）。计费用户须在请求头携带终端用户 UUID：`X-User-Id`（与可灵生图公开接口一致）；其它需应用鉴权的接口仍使用应用级 X-App-Key。"
+        tips="公开抠图接口为 POST /api/v1/clearbg（应用 slug 为 clearbg）。计费用户须在请求头携带终端用户 UUID：`X-User-Id`（与可灵生图公开接口一致）；其它需应用鉴权的接口仍使用应用级 X-App-Key。"
       >
         <div className="space-y-3 text-sm">
           <div className="flex items-start gap-2 rounded-lg bg-muted/40 px-3 py-2 font-mono text-xs break-all">
@@ -216,10 +210,10 @@ export function RemoveBgApiPanel({
           <FormField label="应用标识 slug（参考）" hint="真实 slug 见应用列表或路由中的应用上下文">
             <input className="input w-full max-w-md font-mono text-xs" readOnly value="xxx" />
           </FormField>
-          <p className="text-xs text-muted-foreground leading-relaxed">
+          <Tips>
             应用 API Key（轮换见 Applications）仍用于其它需应用鉴权的接口；抠图公开 API 计费使用终端用户{" "}
             <span className="font-mono text-foreground">X-User-Id</span>。
-          </p>
+          </Tips>
         </div>
       </SectionCard>
     </div>

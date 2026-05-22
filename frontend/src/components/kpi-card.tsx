@@ -1,3 +1,6 @@
+import type { ReactNode } from "react";
+import { Tips } from "@/components/ui/tips";
+
 export function KpiCard({
   label,
   value,
@@ -5,13 +8,17 @@ export function KpiCard({
 }: {
   label: string;
   value: string | number;
-  hint?: string;
+  hint?: ReactNode;
 }) {
   return (
     <div className="card p-5">
       <div className="text-sm text-muted-foreground">{label}</div>
       <div className="mt-3 text-3xl font-semibold">{value}</div>
-      {hint ? <div className="mt-2 text-sm text-muted-foreground">{hint}</div> : null}
+      {hint ? (
+        <div className="mt-2">
+          <Tips variant="compact">{hint}</Tips>
+        </div>
+      ) : null}
     </div>
   );
 }

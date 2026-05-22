@@ -1,6 +1,15 @@
 "use client";
 
 import { getToken } from "@/lib/auth";
+import { ApiError, parseApiErrorMessages } from "@/lib/api-errors";
+
+export {
+  ApiError,
+  formatApiErrorMessage,
+  getErrorMessages,
+  parseApiErrorMessages,
+} from "@/lib/api-errors";
+export { useShowApiError } from "@/lib/show-api-error";
 
 /** 统一为 `.../api`，避免 env 漏写 `/api` 导致请求打到 `/audit-logs` 而 404 */
 function getApiBase(): string {
@@ -25,15 +34,7 @@ async function parseJson<T>(response: Response): Promise<T> {
   const data = await response.json();
   if (!response.ok) {
     const msg = data?.message;
-    const text =
-      typeof msg === "string"
-        ? msg
-        : Array.isArray(msg)
-          ? msg.join(", ")
-          : typeof msg === "object" && msg !== null
-            ? JSON.stringify(msg)
-            : "Request failed";
-    throw new Error(text);
+    throw new ApiError(parseApiErrorMessages(msg));
   }
   return data as T;
 }

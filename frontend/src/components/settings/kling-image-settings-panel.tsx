@@ -5,6 +5,8 @@ import { Plug } from "lucide-react";
 import { apiGet, apiPatch } from "@/lib/api";
 import { SectionCard } from "@/components/section-card";
 import { FormField } from "@/components/ui/form-field";
+import { Tips } from "@/components/ui/tips";
+import { useShowApiError } from "@/lib/show-api-error";
 
 const MODEL_SINGLE_OPTIONS = [
   { value: "kling-v1-5", label: "kling-v1-5（支持单张参考图）" },
@@ -60,8 +62,8 @@ export function KlingImageSettingsPanel({
 }: KlingImageSettingsPanelProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const showApiError = useShowApiError();
 
   const [enabled, setEnabled] = useState(false);
   const [accessKeyNew, setAccessKeyNew] = useState("");
@@ -74,7 +76,6 @@ export function KlingImageSettingsPanel({
   const [baseUrl, setBaseUrl] = useState("");
 
   const load = useCallback(async () => {
-    setError("");
     setLoading(true);
     try {
       const kling = await apiGet<KlingSettings>(`/apps/${appId}/integrations/kling-image`);
@@ -92,11 +93,11 @@ export function KlingImageSettingsPanel({
       setAccessKeyNew("");
       setSecretKeyNew("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "加载失败");
+      showApiError(e);
     } finally {
       setLoading(false);
     }
-  }, [appId]);
+  }, [appId, showApiError]);
 
   useEffect(() => {
     void load();
@@ -105,7 +106,6 @@ export function KlingImageSettingsPanel({
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    setError("");
     setSaved(false);
     try {
       const body: Record<string, unknown> = {
@@ -128,7 +128,7 @@ export function KlingImageSettingsPanel({
       await load();
       onSaved?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "保存失败");
+      showApiError(err);
     } finally {
       setSaving(false);
     }
@@ -137,14 +137,13 @@ export function KlingImageSettingsPanel({
   async function handleClearCredentials() {
     if (!confirm("确定清空已保存的 AccessKey 与 SecretKey？")) return;
     setSaving(true);
-    setError("");
     try {
       await apiPatch(`/apps/${appId}/integrations/kling-image`, { accessKey: "", secretKey: "" });
       setSaved(true);
       await load();
       onSaved?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "操作失败");
+      showApiError(err);
     } finally {
       setSaving(false);
     }
@@ -172,11 +171,6 @@ export function KlingImageSettingsPanel({
         </div>
       ) : null}
 
-      {error ? (
-        <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-          {error}
-        </div>
-      ) : null}
       {saved ? (
         <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
           已保存。
@@ -185,7 +179,7 @@ export function KlingImageSettingsPanel({
 
       <SectionCard
         title="可灵开放平台"
-        description="鉴权见官方 document-api 通用说明：使用 AccessKey、SecretKey 签发短期 Bearer Token（HS256）。默认 API 域名为新加坡接入点，可按控制台说明改为其他区域根地址。"
+        tips="鉴权见官方 document-api 通用说明：使用 AccessKey、SecretKey 签发短期 Bearer Token（HS256）。默认 API 域名为新加坡接入点，可按控制台说明改为其他区域根地址。"
       >
         <form onSubmit={handleSave} className="max-w-xl space-y-4">
           <FormField
@@ -297,7 +291,7 @@ export function KlingImageSettingsPanel({
 
       <SectionCard
         title="公开接口（应用鉴权 + 积分）"
-        description="Query `slug` + Header `X-App-Key`（应用）。可选 `X-User-Id`（终端用户 UUID，与抠图 `/api/v1/clearbg` 相同）：识别到用户则每次生图扣 1 积分，余额不足不调用可灵；失败退回。未带时与抠图共用匿名日限：同一应用、同一 IP 每 UTC 日共 1 次免费。`sync:false` 时 taskId 含 gen:/mi2i: 前缀。"
+        tips="Query `slug` + Header `X-App-Key`（应用）。可选 `X-User-Id`（终端用户 UUID，与抠图 `/api/v1/clearbg` 相同）：识别到用户则每次生图扣 1 积分，余额不足不调用可灵；失败退回。未带时与抠图共用匿名日限：同一应用、同一 IP 每 UTC 日共 1 次免费。`sync:false` 时 taskId 含 gen:/mi2i: 前缀。"
       >
         <div className="space-y-3 text-sm">
           <div className="flex items-start gap-2 rounded-lg bg-muted/40 px-3 py-2 font-mono text-xs break-all">
@@ -326,7 +320,7 @@ export function KlingImageSettingsPanel({
           <FormField label="应用 slug（参考）" hint="真实 slug 见应用列表或路由中的应用上下文">
             <input className="input w-full max-w-md font-mono text-xs" readOnly value="xxx" />
           </FormField>
-          <p className="text-xs text-muted-foreground leading-relaxed">
+          <Tips>
             官方文档：{" "}
             <a
               className="text-primary underline"
@@ -337,7 +331,7 @@ export function KlingImageSettingsPanel({
               klingai.com/document-api
             </a>
             。
-          </p>
+          </Tips>
         </div>
       </SectionCard>
     </div>

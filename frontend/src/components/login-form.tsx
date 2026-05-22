@@ -4,13 +4,14 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loginAdmin } from "@/lib/api";
 import { getToken, setToken } from "@/lib/auth";
+import { useShowApiError } from "@/lib/show-api-error";
 
 export function LoginForm() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const showApiError = useShowApiError();
 
   /** 仅挂载时：有有效会话再进控制台；勿依赖 router，避免与无效 token 的跳转打架 */
   useEffect(() => {
@@ -23,14 +24,13 @@ export function LoginForm() {
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
-    setError("");
 
     try {
       const result = await loginAdmin(email, password);
       setToken(result.access_token);
       router.replace("/dashboard");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "登录失败");
+      showApiError(err);
     } finally {
       setSubmitting(false);
     }
@@ -70,8 +70,6 @@ export function LoginForm() {
           />
         </div>
       </div>
-
-      {error ? <p className="mt-4 text-sm text-red-400">{error}</p> : null}
 
       <button className="btn btn-primary mt-6 w-full" disabled={submitting} type="submit">
         {submitting ? "登录中…" : "登录"}

@@ -10,6 +10,7 @@ import { Modal } from "@/components/ui/modal";
 import { FormField } from "@/components/ui/form-field";
 import { AppDomainLogo } from "@/components/app-domain-logo";
 import { siteOriginFromDomain } from "@/lib/domain-favicon";
+import { useShowApiError } from "@/lib/show-api-error";
 
 interface App {
   id: string;
@@ -46,13 +47,12 @@ export default function AppSelectPage() {
   const user = useCurrentUser();
   const [apps, setApps] = useState<App[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const showApiError = useShowApiError();
 
   const canCreateApp = hasPermission(user, "apps:create");
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<CreateAppForm>(emptyCreateForm);
   const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState("");
 
   const loadApps = useCallback(async () => {
     try {
@@ -63,11 +63,11 @@ export default function AppSelectPage() {
       }
       setApps(list);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "加载应用列表失败");
+      showApiError(err);
     } finally {
       setLoading(false);
     }
-  }, [user.allowedApps]);
+  }, [user.allowedApps, showApiError]);
 
   useEffect(() => {
     loadApps();
@@ -75,14 +75,12 @@ export default function AppSelectPage() {
 
   function openCreate() {
     setCreateForm(emptyCreateForm);
-    setCreateError("");
     setCreateOpen(true);
   }
 
   async function handleCreate() {
     if (!createForm.name.trim() || !createForm.slug.trim()) return;
     setCreating(true);
-    setCreateError("");
     try {
       const created = await apiPost<App>("/apps", {
         ...createForm,
@@ -94,7 +92,7 @@ export default function AppSelectPage() {
       setCreateOpen(false);
       router.push(`/dashboard/${created.id}`);
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "创建应用失败");
+      showApiError(err);
     } finally {
       setCreating(false);
     }
@@ -122,10 +120,6 @@ export default function AppSelectPage() {
           <TopBar showSystemSettings={false} />
         </div>
       </div>
-
-      {error ? (
-        <div className="card mb-6 p-4 text-sm text-red-400">{error}</div>
-      ) : null}
 
       {loading ? (
         <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">
@@ -267,9 +261,6 @@ export default function AppSelectPage() {
               <option value="development">开发</option>
             </select>
           </FormField>
-          {createError ? (
-            <p className="text-sm text-red-400">{createError}</p>
-          ) : null}
         </div>
         <div className="mt-6 flex justify-end gap-3">
           <button

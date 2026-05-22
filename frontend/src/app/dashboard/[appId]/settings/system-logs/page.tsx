@@ -7,6 +7,8 @@ import { SystemSettingsGuard } from "@/components/system-settings-guard";
 import { SectionCard } from "@/components/section-card";
 import { Pagination } from "@/components/ui/pagination";
 import { SearchFilterBar } from "@/components/ui/search-filter-bar";
+import { useAppliedSearch, useSearchLoading } from "@/lib/use-applied-search";
+import { useShowApiError } from "@/lib/show-api-error";
 
 interface SystemOpLog {
   id: string;
@@ -25,12 +27,12 @@ function SystemLogsContent({ appId }: { appId: string }) {
   const [logs, setLogs] = useState<SystemOpLog[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [searchDraft, setSearchDraft] = useState("");
-  const [appliedSearch, setAppliedSearch] = useState("");
-  const [searchToken, setSearchToken] = useState(0);
+  const { searchDraft, setSearchDraft, appliedSearch, searchToken, applySearch } =
+    useAppliedSearch();
+  const { searchLoading, startSearchLoad, finishSearchLoad } = useSearchLoading();
   const [moduleFilter, setModuleFilter] = useState("");
-  const [error, setError] = useState("");
   const [limit, setLimit] = useState(10);
+  const showApiError = useShowApiError();
 
   const load = useCallback(async () => {
     try {
@@ -40,20 +42,21 @@ function SystemLogsContent({ appId }: { appId: string }) {
       const res = await apiGet<{ data: SystemOpLog[]; total: number }>(path);
       setLogs(res.data);
       setTotal(res.total);
-      setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "加载失败");
+      showApiError(err);
+    } finally {
+      finishSearchLoad();
     }
-  }, [appId, page, moduleFilter, limit, appliedSearch, searchToken]);
+  }, [appId, page, moduleFilter, limit, appliedSearch, searchToken, finishSearchLoad, showApiError]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   function handleSearchSubmit() {
-    setAppliedSearch(searchDraft.trim());
+    startSearchLoad();
+    applySearch();
     setPage(1);
-    setSearchToken((t) => t + 1);
   }
 
   const moduleOptions = [
@@ -76,12 +79,11 @@ function SystemLogsContent({ appId }: { appId: string }) {
         </p>
       </div>
 
-      {error ? <div className="card p-4 text-sm text-red-400">{error}</div> : null}
-
       <SearchFilterBar
         search={searchDraft}
         onSearchChange={setSearchDraft}
         onSubmit={handleSearchSubmit}
+        loading={searchLoading}
         filters={[
           {
             key: "module",

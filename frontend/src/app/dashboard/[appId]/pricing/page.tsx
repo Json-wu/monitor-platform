@@ -13,6 +13,7 @@ import { useCurrentApp } from "@/lib/app-context";
 import { SectionCard } from "@/components/section-card";
 import { Modal } from "@/components/ui/modal";
 import { FormField } from "@/components/ui/form-field";
+import { Tips } from "@/components/ui/tips";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DEFAULT_PRICING_PAGE,
@@ -27,6 +28,7 @@ import {
   parseDisplaySlots,
   type DisplaySlot,
 } from "@/lib/pricing-plan-display";
+import { useShowApiError } from "@/lib/show-api-error";
 
 interface Plan {
   id: string;
@@ -161,8 +163,8 @@ const displaySlotLabel: Record<DisplaySlot, string> = {
 export default function PricingPage() {
   const app = useCurrentApp();
   const [plans, setPlans] = useState<Plan[]>([]);
-  const [error, setError] = useState("");
   const [showPreview, setShowPreview] = useState(true);
+  const showApiError = useShowApiError();
 
   const [pageCopy, setPageCopy] = useState<Required<PricingPageCopy>>(DEFAULT_PRICING_PAGE);
 
@@ -178,7 +180,7 @@ export default function PricingPage() {
       const p = await apiGetScoped<{ data: Plan[] }>("/pricing/plans", app.id);
       setPlans(p.data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "加载失败");
+      showApiError(err);
     }
     try {
       const a = await apiGet<{ pricingPage?: unknown }>(`/apps/${app.id}`);
@@ -186,7 +188,7 @@ export default function PricingPage() {
     } catch {
       setPageCopy({ ...DEFAULT_PRICING_PAGE });
     }
-  }, [app.id]);
+  }, [app.id, showApiError]);
 
   useEffect(() => {
     void load();
@@ -196,9 +198,8 @@ export default function PricingPage() {
     setSaving(true);
     try {
       await apiPut(`/pricing/page-preview?appId=${encodeURIComponent(app.id)}`, pageCopy);
-      setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "保存失败");
+      showApiError(err);
     } finally {
       setSaving(false);
     }
@@ -245,12 +246,12 @@ export default function PricingPage() {
       if (sortTrim !== "") {
         const n = Number(sortTrim);
         if (!Number.isInteger(n) || n < 0) {
-          setError("序号须为非负整数");
+          showApiError("序号须为非负整数");
           setSaving(false);
           return;
         }
       } else if (editingPlan) {
-        setError("请填写展示序号（非负整数）");
+        showApiError("请填写展示序号（非负整数）");
         setSaving(false);
         return;
       }
@@ -280,7 +281,7 @@ export default function PricingPage() {
       setPlanModal(false);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "保存失败");
+      showApiError(err);
     } finally {
       setSaving(false);
     }
@@ -291,7 +292,7 @@ export default function PricingPage() {
       await apiPut(`/pricing/plans/${p.id}`, { isActive: !p.isActive });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "操作失败");
+      showApiError(err);
     }
   }
 
@@ -302,7 +303,7 @@ export default function PricingPage() {
       setDeleteTarget(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "删除失败");
+      showApiError(err);
     }
   }
 
@@ -326,11 +327,9 @@ export default function PricingPage() {
         </div>
       </div>
 
-      {error ? <div className="card p-4 text-sm text-red-400">{error}</div> : null}
-
       <SectionCard
         title="站点定价页文案"
-        description="与 web 站定价页顶区、按次付费区块一致；保存后写入应用 pricing_page。"
+        tips="与 web 站定价页顶区、按次付费区块一致；保存后写入应用 pricing_page。"
       >
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField label="营销标签（顶部胶囊）">
@@ -414,12 +413,12 @@ export default function PricingPage() {
       </SectionCard>
 
       {showPreview ? (
-        <SectionCard title="站点效果预览" description="与 web 站 `/pricing` 卡片与排版对齐（4 列栅格、强调卡、勾选列表样式）">
+        <SectionCard title="站点效果预览" tips="与 web 站 `/pricing` 卡片与排版对齐（4 列栅格、强调卡、勾选列表样式）">
           <PricingPreview plans={plans} pricingPage={pageCopy} />
         </SectionCard>
       ) : null}
 
-      <SectionCard title="定价方案" description="订阅与一次性方案；列表按展示序号升序，便于调整前台顺序。">
+      <SectionCard title="定价方案" tips="订阅与一次性方案；列表按展示序号升序，便于调整前台顺序。">
         <div className="mb-4 flex justify-end">
           <button type="button" className="btn btn-primary btn-sm gap-2" onClick={openCreatePlan}>
             <Plus className="h-3.5 w-3.5" /> 新建方案
@@ -655,9 +654,9 @@ export default function PricingPage() {
 
           <div className="border-t border-border pt-4">
             <p className="mb-3 text-sm font-medium text-foreground">Web 端卡片展示</p>
-            <p className="mb-3 text-xs text-muted-foreground">
+            <Tips className="mb-3">
               与站点定价卡一致：高亮边框、角标、次行文案、按钮。留空文案则按价格/额度自动推算；未配置链接且启用按钮时，站点可走代收下单。
-            </p>
+            </Tips>
             <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -721,9 +720,9 @@ export default function PricingPage() {
 
             <div>
               <p className="mb-2 text-sm text-foreground">方案图标</p>
-              <p className="mb-3 text-xs text-muted-foreground">
+              <Tips className="mb-3">
                 显示在标题左侧；可选常用会员风格图标，或与「高亮方案」搭配使用。
-              </p>
+              </Tips>
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"

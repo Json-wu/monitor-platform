@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { apiGetScoped } from "@/lib/api";
 import { useCurrentApp } from "@/lib/app-context";
 import { SectionCard } from "@/components/section-card";
+import { useShowApiError } from "@/lib/show-api-error";
 
 type DataShape = Record<string, unknown> | Record<string, unknown>[];
 
@@ -22,7 +23,7 @@ export function ResourcePage({
 }) {
   const app = useCurrentApp();
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
-  const [error, setError] = useState("");
+  const showApiError = useShowApiError();
 
   useEffect(() => {
     async function load() {
@@ -38,12 +39,12 @@ export function ResourcePage({
         }
         setRows([response]);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "加载失败");
+        showApiError(err);
       }
     }
 
     load();
-  }, [endpoint, app.id]);
+  }, [endpoint, app.id, showApiError]);
 
   const columns = rows.length > 0 ? Object.keys(rows[0]).slice(0, 6) : [];
 
@@ -53,8 +54,6 @@ export function ResourcePage({
         <h1 className="text-3xl font-semibold">{title}</h1>
         <p className="mt-2 text-sm text-muted-foreground">{description}</p>
       </div>
-
-      {error ? <div className="card p-4 text-sm text-red-400">{error}</div> : null}
 
       <SectionCard title={title} description={`当前应用：${app.name}`}>
         <div className="table-wrap">

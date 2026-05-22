@@ -5,6 +5,8 @@ import { CreditCard } from "lucide-react";
 import { apiGet, apiPatch } from "@/lib/api";
 import { SectionCard } from "@/components/section-card";
 import { FormField } from "@/components/ui/form-field";
+import { Tips } from "@/components/ui/tips";
+import { useShowApiError } from "@/lib/show-api-error";
 
 type LmSettings = {
   enabled: boolean;
@@ -38,8 +40,8 @@ export function LinkmePaySettingsPanel({
 }: LinkmePaySettingsPanelProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const showApiError = useShowApiError();
 
   const [enabled, setEnabled] = useState(false);
   const [baseUrl, setBaseUrl] = useState("");
@@ -50,7 +52,6 @@ export function LinkmePaySettingsPanel({
   const [secretKeySet, setSecretKeySet] = useState(false);
 
   const load = useCallback(async () => {
-    setError("");
     setLoading(true);
     try {
       const lm = await apiGet<LmSettings>(`/apps/${appId}/integrations/linkme-pay`);
@@ -62,11 +63,11 @@ export function LinkmePaySettingsPanel({
       setSecretKeySet(lm.secretKeySet);
       setSecretKeyNew("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "加载失败");
+      showApiError(e);
     } finally {
       setLoading(false);
     }
-  }, [appId]);
+  }, [appId, showApiError]);
 
   useEffect(() => {
     load();
@@ -75,7 +76,6 @@ export function LinkmePaySettingsPanel({
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    setError("");
     setSaved(false);
     try {
       const body: Record<string, unknown> = {
@@ -94,7 +94,7 @@ export function LinkmePaySettingsPanel({
       await load();
       onSaved?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "保存失败");
+      showApiError(err);
     } finally {
       setSaving(false);
     }
@@ -103,14 +103,13 @@ export function LinkmePaySettingsPanel({
   async function handleClearSecret() {
     if (!confirm("确定清除已保存的 LinkMePay secretKey？")) return;
     setSaving(true);
-    setError("");
     try {
       await apiPatch(`/apps/${appId}/integrations/linkme-pay`, { secretKey: "" });
       setSaved(true);
       await load();
       onSaved?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "操作失败");
+      showApiError(err);
     } finally {
       setSaving(false);
     }
@@ -127,17 +126,12 @@ export function LinkmePaySettingsPanel({
       {variant === "page" ? (
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">LinkMePay</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <Tips className="mt-2">
             代收（Collect）对接：pid、密钥与异步通知公网根地址；官网通过 Monitor 代理创建订单，密钥不暴露到浏览器。
-          </p>
+          </Tips>
         </div>
       ) : null}
 
-      {error ? (
-        <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-          {error}
-        </div>
-      ) : null}
       {saved ? (
         <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
           已保存。
@@ -146,7 +140,7 @@ export function LinkmePaySettingsPanel({
 
       <SectionCard
         title="商户凭证"
-        description="与 LinkMePay 商户后台一致；action 对应支付渠道（如 SN20108 PayPal、SN20107 BTC）。"
+        tips="与 LinkMePay 商户后台一致；action 对应支付渠道（如 SN20108 PayPal、SN20107 BTC）。"
       >
         <form onSubmit={handleSave} className="max-w-xl space-y-4">
           <label className="flex cursor-pointer items-center gap-2 text-sm">
@@ -230,7 +224,7 @@ export function LinkmePaySettingsPanel({
 
       <SectionCard
         title="公开代收接口"
-        description="官网应调用下方地址创建代收订单；需 Header X-App-Key、Query slug（真实值见应用列表或环境变量，此处 xxx 占位）。JSON Body 仅含三项：planId（定价方案 UUID）、payerId（终端用户 UUID）、quantity（订阅类须为 1，按量包为购买份数）。"
+        tips="官网应调用下方地址创建代收订单；需 Header X-App-Key、Query slug（真实值见应用列表或环境变量，此处 xxx 占位）。JSON Body 仅含三项：planId（定价方案 UUID）、payerId（终端用户 UUID）、quantity（订阅类须为 1，按量包为购买份数）。"
       >
         <div className="space-y-3 text-sm">
           <div className="flex items-start gap-2 rounded-lg bg-muted/40 px-3 py-2 font-mono text-xs break-all">

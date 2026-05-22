@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { apiGet } from "@/lib/api";
 import { AppProvider, type AppInfo } from "@/lib/app-context";
 import { DashboardShell } from "@/components/dashboard-shell";
+import { useShowApiError } from "@/lib/show-api-error";
 
 export default function AppDashboardLayout({
   children,
@@ -14,7 +15,8 @@ export default function AppDashboardLayout({
   const params = useParams<{ appId: string }>();
   const router = useRouter();
   const [app, setApp] = useState<AppInfo | null>(null);
-  const [error, setError] = useState("");
+  const [notFound, setNotFound] = useState(false);
+  const showApiError = useShowApiError();
 
   useEffect(() => {
     async function loadApp() {
@@ -24,16 +26,17 @@ export default function AppDashboardLayout({
         );
         setApp({ id: data.id, name: data.name, slug: data.slug });
       } catch {
-        setError("未找到应用");
+        showApiError("未找到应用");
+        setNotFound(true);
       }
     }
     if (params.appId) loadApp();
-  }, [params.appId]);
+  }, [params.appId, showApiError]);
 
-  if (error) {
+  if (notFound) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4">
-        <p className="text-red-400">{error}</p>
+        <p className="text-muted-foreground">未找到应用</p>
         <button
           type="button"
           className="btn btn-secondary"

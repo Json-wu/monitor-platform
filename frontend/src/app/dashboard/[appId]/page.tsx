@@ -17,6 +17,7 @@ import { apiGetScoped } from "@/lib/api";
 import { useCurrentApp } from "@/lib/app-context";
 import { KpiCard } from "@/components/kpi-card";
 import { SectionCard } from "@/components/section-card";
+import { useShowApiError } from "@/lib/show-api-error";
 
 type Overview = {
   totalUsers: number;
@@ -78,7 +79,7 @@ export default function AppOverviewPage() {
   const [growth, setGrowth] = useState<GrowthPoint[]>([]);
   const [revenue, setRevenue] = useState<RevenueResponse | null>(null);
   const [topUsers, setTopUsers] = useState<TopUser[]>([]);
-  const [error, setError] = useState("");
+  const showApiError = useShowApiError();
 
   useEffect(() => {
     async function load() {
@@ -96,12 +97,12 @@ export default function AppOverviewPage() {
         setRevenue(revenueData);
         setTopUsers(topUsersData);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "加载概览数据失败");
+        showApiError(err);
       }
     }
 
     load();
-  }, [app.id]);
+  }, [app.id, showApiError]);
 
   return (
     <div className="space-y-6">
@@ -111,8 +112,6 @@ export default function AppOverviewPage() {
           应用 <span className="font-medium text-foreground">{app.name}</span> 的增长、收入、用量与头部用户。
         </p>
       </div>
-
-      {error ? <div className="card p-4 text-sm text-red-400">{error}</div> : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <KpiCard label="用户总数" value={overview?.totalUsers ?? "-"} />

@@ -5,10 +5,12 @@ import { Pencil, Plus, Power, RefreshCw, Trash2 } from "lucide-react";
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api";
 import { SectionCard } from "@/components/section-card";
 import { SearchFilterBar } from "@/components/ui/search-filter-bar";
+import { useAppliedSearch } from "@/lib/use-applied-search";
 import { Pagination } from "@/components/ui/pagination";
 import { Modal } from "@/components/ui/modal";
 import { FormField } from "@/components/ui/form-field";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useShowApiError } from "@/lib/show-api-error";
 import { AppDomainLogo } from "@/components/app-domain-logo";
 
 interface App {
@@ -54,12 +56,12 @@ const appEnvironmentLabel: Record<string, string> = {
 };
 
 export function AppsSettingsPanel() {
+  const showApiError = useShowApiError();
   const [apps, setApps] = useState<App[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
-  const [search, setSearch] = useState("");
-  const [error, setError] = useState("");
+  const { searchDraft, setSearchDraft, appliedSearch, applySearch } = useAppliedSearch();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<App | null>(null);
@@ -81,9 +83,9 @@ export function AppsSettingsPanel() {
       setApps(res.data);
       setTotal(res.total);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "加载失败");
+      showApiError(err);
     }
-  }, [page, limit]);
+  }, [page, limit, showApiError]);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -92,13 +94,18 @@ export function AppsSettingsPanel() {
     return () => window.clearTimeout(t);
   }, [load]);
 
-  const filtered = search
+  const filtered = appliedSearch
     ? apps.filter(
         (a) =>
-          a.name.toLowerCase().includes(search.toLowerCase()) ||
-          a.slug.toLowerCase().includes(search.toLowerCase()),
+          a.name.toLowerCase().includes(appliedSearch.toLowerCase()) ||
+          a.slug.toLowerCase().includes(appliedSearch.toLowerCase()),
       )
     : apps;
+
+  function handleSearchSubmit() {
+    applySearch();
+    setPage(1);
+  }
 
   function openCreate() {
     setEditing(null);
@@ -132,7 +139,7 @@ export function AppsSettingsPanel() {
         setCopiedAppId((id) => (id === app.id ? null : id));
       }, 2000);
     } catch {
-      setError("复制失败，请检查浏览器剪贴板权限");
+      showApiError("复制失败，请检查浏览器剪贴板权限");
     }
   }
 
@@ -158,7 +165,7 @@ export function AppsSettingsPanel() {
       setModalOpen(false);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "保存失败");
+      showApiError(err);
     } finally {
       setSaving(false);
     }
@@ -175,7 +182,8 @@ export function AppsSettingsPanel() {
       setConfirmTarget(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "操作失败");
+      showApiError(err);
+      if (action !== "delete") setConfirmTarget(null);
     }
   }
 
@@ -210,9 +218,11 @@ export function AppsSettingsPanel() {
         <p className="mt-2 text-sm text-muted-foreground">创建、配置与管理接入 Monitor 的应用。</p>
       </div>
 
-      {error ? <div className="card p-4 text-sm text-red-400">{error}</div> : null}
-
-      <SearchFilterBar search={search} onSearchChange={setSearch} onSubmit={() => setPage(1)} />
+      <SearchFilterBar
+        search={searchDraft}
+        onSearchChange={setSearchDraft}
+        onSubmit={handleSearchSubmit}
+      />
 
       <SectionCard title="全部应用" description={`共 ${total} 个`}>
         <div className="mb-4 flex justify-end">
