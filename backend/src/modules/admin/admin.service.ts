@@ -116,7 +116,19 @@ export class AdminService {
 
   async remove(id: string) {
     await this.findOne(id);
-    return this.prisma.adminUser.delete({ where: { id } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.creditTransaction.updateMany({
+        where: { operatorId: id },
+        data: { operatorId: null },
+      });
+      await tx.endUserAuditLog.updateMany({
+        where: { actorAdminId: id },
+        data: { actorAdminId: null },
+      });
+      await tx.systemOperationLog.deleteMany({ where: { adminId: id } });
+      await tx.adminUser.delete({ where: { id } });
+    });
+    return { message: 'Admin deleted successfully' };
   }
 
   async resetPassword(id: string, dto: ResetPasswordDto) {

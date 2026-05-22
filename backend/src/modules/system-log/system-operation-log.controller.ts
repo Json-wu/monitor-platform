@@ -30,6 +30,7 @@ export class SystemOperationLogController {
   @ApiQuery({ name: 'adminId', required: false, description: '管理员 UUID' })
   @ApiQuery({ name: 'startDate', required: false })
   @ApiQuery({ name: 'endDate', required: false })
+  @ApiQuery({ name: 'search', required: false, description: '摘要/邮箱/模块/操作' })
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 50 })
   @Permissions('system_logs:view')
@@ -40,11 +41,12 @@ export class SystemOperationLogController {
     @Query('adminId') adminId?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('search') search?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit?: number,
   ) {
     return this.service.findAll(
-      { appId, module, action, adminId, startDate, endDate },
+      { appId, module, action, adminId, startDate, endDate, search },
       page,
       limit,
     );

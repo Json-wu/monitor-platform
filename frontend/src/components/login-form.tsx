@@ -5,16 +5,10 @@ import { useRouter } from "next/navigation";
 import { loginAdmin } from "@/lib/api";
 import { getToken, setToken } from "@/lib/auth";
 
-/** 与 prisma seed 默认一致；构建期可通过 NEXT_PUBLIC_ADMIN_LOGIN_* 覆盖 */
-const defaultEmail =
-  process.env.NEXT_PUBLIC_ADMIN_LOGIN_EMAIL?.trim() || "admin@monitor.local";
-const defaultPassword =
-  process.env.NEXT_PUBLIC_ADMIN_LOGIN_PASSWORD || "admin123";
-
 export function LoginForm() {
   const router = useRouter();
-  const [email, setEmail] = useState(defaultEmail);
-  const [password, setPassword] = useState(defaultPassword);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -60,6 +54,7 @@ export function LoginForm() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            autoComplete="username"
           />
         </div>
 
@@ -71,6 +66,7 @@ export function LoginForm() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            autoComplete="current-password"
           />
         </div>
       </div>
@@ -80,10 +76,6 @@ export function LoginForm() {
       <button className="btn btn-primary mt-6 w-full" disabled={submitting} type="submit">
         {submitting ? "登录中…" : "登录"}
       </button>
-
-      <p className="mt-4 text-xs text-muted-foreground">
-        默认种子账号：admin@monitor.local / admin123
-      </p>
     </form>
   );
 }

@@ -85,29 +85,43 @@ export class SystemOperationLogService {
       adminId?: string;
       startDate?: string;
       endDate?: string;
+      search?: string;
     },
     page = 1,
     limit = 50,
   ) {
     const where: Prisma.SystemOperationLogWhereInput = {};
+    const and: Prisma.SystemOperationLogWhereInput[] = [];
 
     const appId =
       filters.appId && filters.appId !== 'undefined' && filters.appId !== 'null'
         ? filters.appId
         : undefined;
-    // Login/logout and other global actions store appId = null; still show them when
-    // the UI filters by current app context.
     if (appId) {
-      where.OR = [{ appId }, { appId: null }];
+      and.push({ OR: [{ appId }, { appId: null }] });
     }
-    if (filters.module) where.module = filters.module;
-    if (filters.action) where.action = filters.action;
-    if (filters.adminId) where.adminId = filters.adminId;
+    if (filters.module) and.push({ module: filters.module });
+    if (filters.action) and.push({ action: filters.action });
+    if (filters.adminId) and.push({ adminId: filters.adminId });
     if (filters.startDate || filters.endDate) {
-      where.createdAt = {};
-      if (filters.startDate) where.createdAt.gte = new Date(filters.startDate);
-      if (filters.endDate) where.createdAt.lte = new Date(filters.endDate);
+      const createdAt: Prisma.DateTimeFilter = {};
+      if (filters.startDate) createdAt.gte = new Date(filters.startDate);
+      if (filters.endDate) createdAt.lte = new Date(filters.endDate);
+      and.push({ createdAt });
     }
+    const q = filters.search?.trim();
+    if (q) {
+      and.push({
+        OR: [
+          { summary: { contains: q, mode: 'insensitive' } },
+          { adminEmail: { contains: q, mode: 'insensitive' } },
+          { module: { contains: q, mode: 'insensitive' } },
+          { action: { contains: q, mode: 'insensitive' } },
+        ],
+      });
+    }
+    if (and.length === 1) Object.assign(where, and[0]);
+    else if (and.length > 1) where.AND = and;
 
     const skip = (page - 1) * limit;
     const [data, total] = await Promise.all([

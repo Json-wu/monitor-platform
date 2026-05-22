@@ -8,6 +8,8 @@ import { hasPermission, useCurrentUser } from "@/lib/user-context";
 import { TopBar } from "@/components/top-bar";
 import { Modal } from "@/components/ui/modal";
 import { FormField } from "@/components/ui/form-field";
+import { AppDomainLogo } from "@/components/app-domain-logo";
+import { siteOriginFromDomain } from "@/lib/domain-favicon";
 
 interface App {
   id: string;
@@ -36,10 +38,7 @@ const emptyCreateForm: CreateAppForm = {
 };
 
 function siteUrlFromDomain(domain: string): string {
-  const t = domain.trim();
-  if (!t) return "";
-  if (/^https?:\/\//i.test(t)) return t;
-  return `https://${t}`;
+  return siteOriginFromDomain(domain);
 }
 
 export default function AppSelectPage() {
@@ -165,9 +164,7 @@ export default function AppSelectPage() {
               className="card group cursor-pointer p-6 text-left transition hover:border-accent/50 hover:bg-accent/5"
             >
               <div className="mb-4 flex items-center gap-3">
-                <div className="rounded-xl bg-accent/20 p-2.5 text-accent">
-                  <AppWindow className="h-5 w-5" />
-                </div>
+                <AppDomainLogo domain={app.domain} withWrapper />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-semibold">{app.name}</div>
                   <div className="truncate text-xs text-muted-foreground">{app.slug}</div>

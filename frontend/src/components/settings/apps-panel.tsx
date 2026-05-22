@@ -9,6 +9,7 @@ import { Pagination } from "@/components/ui/pagination";
 import { Modal } from "@/components/ui/modal";
 import { FormField } from "@/components/ui/form-field";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { AppDomainLogo } from "@/components/app-domain-logo";
 
 interface App {
   id: string;
@@ -242,7 +243,12 @@ export function AppsSettingsPanel() {
               ) : (
                 filtered.map((app) => (
                   <tr key={app.id}>
-                    <td className="font-medium">{app.name}</td>
+                    <td className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <AppDomainLogo domain={app.domain} iconClassName="h-5 w-5 shrink-0" />
+                        <span>{app.name}</span>
+                      </div>
+                    </td>
                     <td className="font-mono text-sm">{app.slug}</td>
                     <td className="text-sm">{app.domain || "-"}</td>
                     <td>

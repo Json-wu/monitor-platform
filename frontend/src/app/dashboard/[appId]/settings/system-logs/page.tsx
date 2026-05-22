@@ -25,7 +25,9 @@ function SystemLogsContent({ appId }: { appId: string }) {
   const [logs, setLogs] = useState<SystemOpLog[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
+  const [searchDraft, setSearchDraft] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
+  const [searchToken, setSearchToken] = useState(0);
   const [moduleFilter, setModuleFilter] = useState("");
   const [error, setError] = useState("");
   const [limit, setLimit] = useState(10);
@@ -34,29 +36,25 @@ function SystemLogsContent({ appId }: { appId: string }) {
     try {
       let path = `/system-operation-logs?page=${page}&limit=${limit}&appId=${encodeURIComponent(appId)}`;
       if (moduleFilter) path += `&module=${encodeURIComponent(moduleFilter)}`;
+      if (appliedSearch) path += `&search=${encodeURIComponent(appliedSearch)}`;
       const res = await apiGet<{ data: SystemOpLog[]; total: number }>(path);
       setLogs(res.data);
       setTotal(res.total);
+      setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "加载失败");
     }
-  }, [appId, page, moduleFilter, limit]);
+  }, [appId, page, moduleFilter, limit, appliedSearch, searchToken]);
 
   useEffect(() => {
-    const t = window.setTimeout(() => {
-      void load();
-    }, 0);
-    return () => window.clearTimeout(t);
+    void load();
   }, [load]);
 
-  const filtered = search
-    ? logs.filter(
-        (l) =>
-          l.summary.toLowerCase().includes(search.toLowerCase()) ||
-          l.adminEmail.toLowerCase().includes(search.toLowerCase()) ||
-          l.module.toLowerCase().includes(search.toLowerCase()),
-      )
-    : logs;
+  function handleSearchSubmit() {
+    setAppliedSearch(searchDraft.trim());
+    setPage(1);
+    setSearchToken((t) => t + 1);
+  }
 
   const moduleOptions = [
     { value: "auth", label: "认证" },
@@ -81,9 +79,9 @@ function SystemLogsContent({ appId }: { appId: string }) {
       {error ? <div className="card p-4 text-sm text-red-400">{error}</div> : null}
 
       <SearchFilterBar
-        search={search}
-        onSearchChange={setSearch}
-        onSubmit={() => setPage(1)}
+        search={searchDraft}
+        onSearchChange={setSearchDraft}
+        onSubmit={handleSearchSubmit}
         filters={[
           {
             key: "module",
@@ -112,14 +110,14 @@ function SystemLogsContent({ appId }: { appId: string }) {
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {logs.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="text-center text-muted-foreground">
                     暂无日志
                   </td>
                 </tr>
               ) : (
-                filtered.map((l) => (
+                logs.map((l) => (
                   <tr key={l.id}>
                     <td className="whitespace-nowrap text-xs text-muted-foreground">
                       {new Date(l.createdAt).toLocaleString()}
@@ -128,7 +126,9 @@ function SystemLogsContent({ appId }: { appId: string }) {
                       <span className="badge">{l.module}</span>
                     </td>
                     <td className="text-sm">{l.action}</td>
-                    <td className="max-w-[280px] truncate text-sm">{l.summary}</td>
+                    <td className="max-w-[280px] truncate text-sm" title={l.summary}>
+                      {l.summary}
+                    </td>
                     <td className="text-sm">{l.adminEmail}</td>
                     <td className="font-mono text-xs text-muted-foreground">{l.ipAddress}</td>
                   </tr>
