@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
+  GLOBAL_INTEGRATION_GUMROAD,
   GLOBAL_INTEGRATION_LINKME_PAY,
   GLOBAL_INTEGRATION_REMOVE_BACKGROUND,
   GLOBAL_INTEGRATION_SMTP,
@@ -41,13 +42,14 @@ export class GlobalIntegrationSettingsService {
 
   /** 供 readIntegrationsRoot / readSmtpSettingsFromApp / RemoveBackgroundService.parseSettings 使用 */
   async getSettingsObject(): Promise<Record<string, unknown>> {
-    const [lm, rb, smtp] = await Promise.all([
+    const [lm, rb, smtp, gum] = await Promise.all([
       this.getConfig(GLOBAL_INTEGRATION_LINKME_PAY),
       this.getConfig(GLOBAL_INTEGRATION_REMOVE_BACKGROUND),
       this.getConfig(GLOBAL_INTEGRATION_SMTP),
+      this.getConfig(GLOBAL_INTEGRATION_GUMROAD),
     ]);
     return {
-      integrations: { linkmePay: lm },
+      integrations: { linkmePay: lm, gumroad: gum },
       removeBackgroundApi: rb,
       smtp,
     };

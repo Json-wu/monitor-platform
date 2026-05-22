@@ -5,10 +5,16 @@ import { useRouter } from "next/navigation";
 import { loginAdmin } from "@/lib/api";
 import { getToken, setToken } from "@/lib/auth";
 
+/** 与 prisma seed 默认一致；构建期可通过 NEXT_PUBLIC_ADMIN_LOGIN_* 覆盖 */
+const defaultEmail =
+  process.env.NEXT_PUBLIC_ADMIN_LOGIN_EMAIL?.trim() || "admin@monitor.local";
+const defaultPassword =
+  process.env.NEXT_PUBLIC_ADMIN_LOGIN_PASSWORD || "admin123";
+
 export function LoginForm() {
   const router = useRouter();
-  const [email, setEmail] = useState("admin@monitor.local");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState(defaultEmail);
+  const [password, setPassword] = useState(defaultPassword);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 

@@ -19,6 +19,7 @@ import { RemoveBackgroundModule } from './modules/remove-background/remove-backg
 import { ClientActivityModule } from './modules/client-activity/client-activity.module';
 import { PublicEndUserAuthModule } from './modules/public-end-user-auth/public-end-user-auth.module';
 import { LinkmePayModule } from './modules/linkmepay/linkmepay.module';
+import { GumroadModule } from './modules/gumroad/gumroad.module';
 import { CreditSchedulerModule } from './modules/credit-scheduler/credit-scheduler.module';
 import { GlobalIntegrationModule } from './modules/global-integration/global-integration.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -46,6 +47,7 @@ import { RbacGuard } from './common/guards/rbac.guard';
     ClientActivityModule,
     PublicEndUserAuthModule,
     LinkmePayModule,
+    GumroadModule,
     CreditSchedulerModule,
   ],
   providers: [

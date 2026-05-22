@@ -11,10 +11,12 @@ import { sanitizeApplicationForApiResponse } from '../../common/utils/applicatio
 import { CreateAppDto, UpdateAppDto } from './dto/create-app.dto';
 import { PatchRemoveBackgroundSettingsDto } from '../remove-background/dto/remove-bg-settings.dto';
 import { PatchLinkmePaySettingsDto } from '../linkmepay/dto/linkmepay-settings.dto';
+import { PatchGumroadSettingsDto } from '../gumroad/dto/gumroad-settings.dto';
 import { PatchSmtpSettingsDto } from './dto/patch-smtp-settings.dto';
 import { v4 as uuid } from 'uuid';
 import { GlobalIntegrationSettingsService } from '../global-integration/global-integration-settings.service';
 import {
+  GLOBAL_INTEGRATION_GUMROAD,
   GLOBAL_INTEGRATION_LINKME_PAY,
   GLOBAL_INTEGRATION_REMOVE_BACKGROUND,
   GLOBAL_INTEGRATION_SMTP,
@@ -160,9 +162,10 @@ export class AppRegistryService {
   /** 集成能力总览；集成项来自全站表，与 appId 无关（仍校验应用存在） */
   async getIntegrationsOverview(id: string) {
     await this.requireApplication(id);
-    const [rb, lm, smtp, kling, replicate] = await Promise.all([
+    const [rb, lm, gum, smtp, kling, replicate] = await Promise.all([
       this.getClearbgSettings(id),
       this.getLinkmePaySettings(id),
+      this.getGumroadSettings(id),
       this.getSmtpSettings(id),
       this.klingImage.getSettingsForAdmin(),
       this.replicate.getSettingsForAdmin(),
@@ -179,6 +182,10 @@ export class AppRegistryService {
           lm.secretKeySet &&
           !!lm.pid?.trim() &&
           !!lm.notifyPublicBase?.trim(),
+      },
+      gumroad: {
+        enabled: gum.enabled,
+        configured: gum.enabled && !!gum.sellerId?.trim(),
       },
       smtp: {
         enabled: smtp.enabled,
@@ -306,5 +313,33 @@ export class AppRegistryService {
       },
     );
     return this.findOne(id);
+  }
+
+  async getGumroadSettings(id: string) {
+    await this.requireApplication(id);
+    const gum = await this.globalIntegration.getConfig(
+      GLOBAL_INTEGRATION_GUMROAD,
+    );
+    const sellerId =
+      typeof gum.sellerId === 'string' ? gum.sellerId.trim() : '';
+    return {
+      enabled: gum.enabled !== false,
+      sellerId,
+      sellerIdSet: sellerId.length > 0,
+    };
+  }
+
+  async patchGumroadSettings(id: string, dto: PatchGumroadSettingsDto) {
+    await this.requireApplication(id);
+    await this.globalIntegration.mergeConfig(
+      GLOBAL_INTEGRATION_GUMROAD,
+      (raw) => {
+        const next = { ...raw };
+        if (dto.enabled !== undefined) next.enabled = dto.enabled;
+        if (dto.sellerId !== undefined) next.sellerId = dto.sellerId.trim();
+        return next;
+      },
+    );
+    return this.getGumroadSettings(id);
   }
 }

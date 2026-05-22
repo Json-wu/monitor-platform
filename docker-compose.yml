@@ -1,20 +1,26 @@
 # 可选：本机一键 Postgres + 后端 + 管理前端（会同时构建/运行多容器，内存与 CPU 占用高）。
 # 若本机内存紧张，请跳过本文件，改用仓库根目录 build-acr.sh 仅构建并推送 ACR，在云上部署。
-# 若本机已在 backend/docker-compose.yml 占用 5432，请先停止该栈或改下方端口映射。
+# 若本机 5432 已被占用（常见：本机 Postgres 或 backend/docker-compose.yml），
+# 默认将 Postgres 映射到宿主机 5433；容器内 backend 仍连 postgres:5432。
+# 需要占用 5432 时可：POSTGRES_HOST_PORT=5432 docker compose up -d
 #
 # 可选：在仓库根目录创建 .env，仅用于 compose 变量，例如：
 #   NEXT_PUBLIC_API_BASE_URL=http://localhost:4000
+#
+# 国内若无法访问 Docker Hub，默认使用阿里云 ACR 个人镜像（需先 docker login）：
+#   docker login crpi-g5p50ww96ven4gi1.cn-shanghai.personal.cr.aliyuncs.com
+# 可覆盖：NODE_IMAGE=node:20-alpine POSTGRES_IMAGE=postgres:15-alpine
 name: monitor-platform
 
 services:
   postgres:
-    image: postgres:15-alpine
+    image: ${POSTGRES_IMAGE:-docker.m.daocloud.io/library/postgres:15-alpine}
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: monitor
     ports:
-      - "5432:5432"
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -27,6 +33,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-crpi-g5p50ww96ven4gi1.cn-shanghai.personal.cr.aliyuncs.com/lucyx/node:22-bookworm-slim}
     env_file:
       - ./backend/.env
     environment:
@@ -49,6 +57,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
+        NODE_IMAGE: ${NODE_IMAGE:-crpi-g5p50ww96ven4gi1.cn-shanghai.personal.cr.aliyuncs.com/lucyx/node:22-bookworm-slim}
         # 由浏览器请求宿主机上的 API（与 ports 中 4000:4010 一致）
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:4000}
     ports:

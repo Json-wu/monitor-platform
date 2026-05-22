@@ -66,6 +66,7 @@ function SystemLogsContent({ appId }: { appId: string }) {
     { value: "user", label: "用户（API）" },
     { value: "credit", label: "积分" },
     { value: "notification", label: "通知" },
+    { value: "gumroad", label: "Gumroad 支付" },
   ];
 
   return (
@@ -73,7 +74,7 @@ function SystemLogsContent({ appId }: { appId: string }) {
       <div>
         <h1 className="text-3xl font-semibold">系统活动</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          后台管理员登录、登出及写操作（新增/修改/删除等），按当前应用上下文筛选。
+          后台管理员登录、登出、写操作，以及 Gumroad 等支付 Webhook 回调记录，按当前应用上下文筛选。
         </p>
       </div>
 

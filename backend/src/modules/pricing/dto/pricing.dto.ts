@@ -72,6 +72,16 @@ export class CreatePlanDto {
 
   @ApiPropertyOptional({
     description:
+      '第三方支付页直链（如 Gumroad 产品 URL）。配置后：前端可直接跳转购买；Gumroad Webhook 校验 seller_id 后按此匹配方案并发放积分',
+    nullable: true,
+    example: 'https://username.gumroad.com/l/abcde',
+  })
+  @IsOptional()
+  @IsString()
+  paymentLink?: string | null;
+
+  @ApiPropertyOptional({
+    description:
       '卡片展示元数据：highlight、badge、creditsLine、perImageLine、ctaLabel、ctaHref、planIconPreset 等',
     type: 'object',
     additionalProperties: true,
@@ -144,6 +154,14 @@ export class UpdatePlanDto {
   @IsInt()
   @Min(0)
   sortOrder?: number;
+
+  @ApiPropertyOptional({
+    description: '第三方支付页直链（如 Gumroad 产品 URL）；传 null 清空',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  paymentLink?: string | null;
 
   @ApiPropertyOptional({ type: 'object', additionalProperties: true })
   @IsOptional()

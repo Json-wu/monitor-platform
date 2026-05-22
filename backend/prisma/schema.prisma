@@ -380,6 +380,8 @@ model PricingPlan {
   features        Json            @default("[]")
   limits          Json            @default("{}")
   stripePriceId   String?         @map("stripe_price_id")
+  /// 第三方支付页直链（如 Gumroad 产品 URL）；前端定价卡片可作为「立即购买」跳转地址
+  paymentLink     String?         @map("payment_link")
   metadata        Json?
   createdAt       DateTime        @default(now()) @map("created_at")
   updatedAt       DateTime        @updatedAt @map("updated_at")

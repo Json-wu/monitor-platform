@@ -23,6 +23,7 @@ import { AppRegistryService } from './app-registry.service';
 import { CreateAppDto, UpdateAppDto } from './dto/create-app.dto';
 import { PatchRemoveBackgroundSettingsDto } from '../remove-background/dto/remove-bg-settings.dto';
 import { PatchLinkmePaySettingsDto } from '../linkmepay/dto/linkmepay-settings.dto';
+import { PatchGumroadSettingsDto } from '../gumroad/dto/gumroad-settings.dto';
 import { PatchSmtpSettingsDto } from './dto/patch-smtp-settings.dto';
 import { PatchKlingImageSettingsDto } from '../kling-image/dto/kling-image-settings.dto';
 import { PatchReplicateSettingsDto } from '../replicate/dto/patch-replicate-settings.dto';
@@ -89,6 +90,31 @@ export class AppRegistryController {
     @Body() dto: PatchLinkmePaySettingsDto,
   ) {
     return this.service.patchLinkmePaySettings(id, dto);
+  }
+
+  @Get(':id/integrations/gumroad')
+  @Permissions('apps:view')
+  @ApiOperation({
+    summary: '读取 Gumroad 配置',
+    description: '全站共用；用于 Ping/Webhook 校验 seller_id。',
+  })
+  @ApiParam({ name: 'id', description: '应用 UUID（须存在）' })
+  getGumroadSettings(@Param('id') id: string) {
+    return this.service.getGumroadSettings(id);
+  }
+
+  @Patch(':id/integrations/gumroad')
+  @Permissions('apps:edit')
+  @ApiOperation({
+    summary: '更新 Gumroad 配置',
+    description: '写入全站 global_integration_setting.name=gumroad。',
+  })
+  @ApiParam({ name: 'id', description: '应用 UUID（须存在）' })
+  patchGumroadSettings(
+    @Param('id') id: string,
+    @Body() dto: PatchGumroadSettingsDto,
+  ) {
+    return this.service.patchGumroadSettings(id, dto);
   }
 
   @Get(':id/integrations/kling-image')

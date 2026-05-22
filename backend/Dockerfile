@@ -1,7 +1,11 @@
-FROM node:20-alpine AS builder
+# 构建基础镜像可通过 --build-arg NODE_IMAGE=... 覆盖（默认 node:20-alpine）
+# 例：crpi-g5p50ww96ven4gi1.cn-shanghai.personal.cr.aliyuncs.com/lucyx/node:22-bookworm-slim
+ARG NODE_IMAGE=node:20-alpine
+FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm ci
+COPY scripts/docker-npm-ci.sh ./scripts/docker-npm-ci.sh
+RUN chmod +x ./scripts/docker-npm-ci.sh && ./scripts/docker-npm-ci.sh
 COPY prisma ./prisma
 COPY prisma.config.ts ./
 COPY tsconfig*.json nest-cli.json ./
@@ -14,18 +18,28 @@ RUN npx prisma generate && npm run build \
       --esModuleInterop --skipLibCheck --resolveJsonModule \
       --outDir dist
 
-FROM node:20-alpine AS runner
+ARG NODE_IMAGE=node:20-alpine
+FROM ${NODE_IMAGE} AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=4010
-RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nestjs
+RUN if command -v apk >/dev/null 2>&1; then \
+      addgroup --system --gid 1001 nodejs \
+      && adduser --system --uid 1001 --ingroup nodejs nestjs; \
+    else \
+      groupadd --system --gid 1001 nodejs \
+      && useradd --system --uid 1001 --gid nodejs nestjs; \
+    fi
 COPY package.json package-lock.json* ./
+COPY scripts/docker-npm-ci.sh ./scripts/docker-npm-ci.sh
 COPY prisma ./prisma
 COPY prisma.config.ts ./
 # 生产依赖 + prisma CLI（用于镜像内 prisma migrate deploy）
 # 构建期占位 URL；运行时由 compose 的 environment / env_file 覆盖为真实 DATABASE_URL
 ENV DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/placeholder
-RUN npm ci --omit=dev && npm install prisma@7.7.0 --no-save && npx prisma generate
+RUN chmod +x ./scripts/docker-npm-ci.sh && ./scripts/docker-npm-ci.sh --omit=dev \
+  && npm install prisma@7.7.0 --no-save \
+  && npx prisma generate
 COPY --from=builder /app/dist ./dist
 USER nestjs
 EXPOSE 4010

@@ -4,7 +4,9 @@ import {
   ArgumentsHost,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { Response } from 'express';
 
 function normalizeHttpExceptionBody(res: string | object): string | object {
@@ -17,8 +19,26 @@ function normalizeHttpExceptionBody(res: string | object): string | object {
   return res;
 }
 
+function prismaConnectionMessage(exception: unknown): string | null {
+  if (!(exception instanceof Prisma.PrismaClientKnownRequestError)) {
+    return null;
+  }
+  const code = exception.code;
+  if (
+    code === 'ECONNREFUSED' ||
+    code === 'P1001' ||
+    code === 'P1000' ||
+    code === 'P1017'
+  ) {
+    return 'Database connection failed; check DATABASE_URL and that PostgreSQL is running';
+  }
+  return null;
+}
+
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(GlobalExceptionFilter.name);
+
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
@@ -43,6 +63,16 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     ) {
       status = HttpStatus.PAYLOAD_TOO_LARGE;
       message = 'Payload too large';
+    } else {
+      const dbMsg = prismaConnectionMessage(exception);
+      if (dbMsg) {
+        status = HttpStatus.SERVICE_UNAVAILABLE;
+        message = dbMsg;
+      } else {
+        this.logger.error(
+          exception instanceof Error ? exception.stack : String(exception),
+        );
+      }
     }
 
     response.status(status).json({

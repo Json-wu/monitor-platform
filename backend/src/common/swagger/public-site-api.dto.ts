@@ -64,6 +64,13 @@ export class PublicPricingPlanPublicDto {
 
   @ApiProperty({ description: '排序权重，越小越靠前' })
   sortOrder: number;
+
+  @ApiProperty({
+    nullable: true,
+    description: '第三方支付页直链（如 Gumroad 产品 URL）；未配置时为 null',
+    example: 'https://username.gumroad.com/l/abcde',
+  })
+  paymentLink: string | null;
 }
 
 export class PublicPricingResponseDto {

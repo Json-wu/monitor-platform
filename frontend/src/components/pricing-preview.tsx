@@ -2,6 +2,11 @@
 
 import { useState } from "react";
 import { PlanPresetIcon } from "@/lib/plan-icon-presets";
+import {
+  filterPlansByDisplaySlot,
+  isExternalHref,
+  planHasDisplaySlot,
+} from "@/lib/pricing-plan-display";
 
 /**
  * Visual parity with web/src/app/pricing/page.tsx (cards + header + pay-as-you-go).
@@ -12,6 +17,8 @@ const WEB = {
   accent: "#6d28d9",
   accentLight: "#8b5cf6",
   success: "#22c55e",
+  /** 非高亮商品按钮边框（比 border-border 更亮） */
+  ctaBorder: "#52525b",
 } as const;
 
 export type PricingPageCopy = {
@@ -46,7 +53,8 @@ type PlanMeta = {
   perImageLine?: string;
   ctaLabel?: string;
   ctaHref?: string;
-  /** crown | sparkles | gem | award */
+  ctaEnabled?: boolean;
+  displaySlots?: ("product_list" | "quick_entry")[];
   planIconPreset?: string;
 };
 
@@ -74,6 +82,7 @@ function parseMeta(metadata: unknown): PlanMeta {
     perImageLine: typeof m.perImageLine === "string" ? m.perImageLine : undefined,
     ctaLabel: typeof m.ctaLabel === "string" ? m.ctaLabel : undefined,
     ctaHref: typeof m.ctaHref === "string" ? m.ctaHref : undefined,
+    ctaEnabled: m.ctaEnabled === false ? false : true,
     planIconPreset: typeof m.planIconPreset === "string" ? m.planIconPreset : undefined,
   };
 }
@@ -124,6 +133,7 @@ function formatPayAsYouGoPerImageLabel(plans: PricingPlanRow[]): string | null {
   const payg = [...plans]
     .filter(
       (p) =>
+        planHasDisplaySlot(p, "quick_entry") &&
         p.billingInterval === "one_time" &&
         Number(p.price) > 0 &&
         Number(p.creditsPerCycle) > 0,
@@ -157,6 +167,68 @@ function defaultPerImageLine(price: number, credits: number): string | null {
 /** Strip mistaken trailing " 0" on free-tier copy (e.g. "One free quota per day 0"). */
 function sanitizeFreeTierCreditsCopy(text: string): string {
   return text.replace(/\s+0\s*$/u, "").trim();
+}
+
+function PreviewPlanCta({
+  meta,
+  highlight,
+}: {
+  meta: PlanMeta;
+  highlight: boolean;
+}) {
+  const ctaLabel = meta.ctaLabel?.trim() ?? "";
+  if (!ctaLabel) return null;
+  const enabled = meta.ctaEnabled !== false;
+  const href = meta.ctaHref?.trim();
+  const activeClass = `mt-6 block cursor-pointer rounded-xl py-3 text-center text-sm font-semibold transition-all duration-200 ${
+    highlight
+      ? "text-white shadow-md"
+      : "border text-foreground shadow-sm hover:border-[#71717a]"
+  }`;
+  const disabledClass =
+    "mt-6 block cursor-not-allowed rounded-xl border bg-muted/40 py-3 text-center text-sm font-semibold text-muted-foreground opacity-60";
+
+  if (!enabled) {
+    return (
+      <span
+        className={disabledClass}
+        style={highlight ? undefined : { borderColor: WEB.ctaBorder }}
+      >
+        {ctaLabel}
+      </span>
+    );
+  }
+
+  const style = highlight
+    ? { backgroundColor: WEB.accent }
+    : { borderColor: WEB.ctaBorder };
+  if (href) {
+    const external = isExternalHref(href);
+    if (external) {
+      return (
+        <a
+          href={href}
+          className={activeClass}
+          style={style}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {ctaLabel}
+        </a>
+      );
+    }
+    return (
+      <a href={href} className={activeClass} style={style}>
+        {ctaLabel}
+      </a>
+    );
+  }
+
+  return (
+    <span className={activeClass} style={style}>
+      {ctaLabel}
+    </span>
+  );
 }
 
 function CheckIcon() {
@@ -238,9 +310,13 @@ type Props = {
 export function PricingPreview({ plans, pricingPage }: Props) {
   const page = { ...DEFAULT_PRICING_PAGE, ...pricingPage };
   const active = plans.filter((p) => p.isActive).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-  const gridPlans = active.filter((p) => p.billingInterval !== "one_time");
-  const paygPlans = active.filter(
+  const gridPlans = filterPlansByDisplaySlot(active, "product_list");
+  const quickEntryPlans = filterPlansByDisplaySlot(active, "quick_entry");
+  const paygPlans = quickEntryPlans.filter(
     (p) => p.billingInterval === "one_time" && Number(p.price) > 0,
+  );
+  const quickEntryCardPlans = quickEntryPlans.filter(
+    (p) => !(p.billingInterval === "one_time" && Number(p.price) > 0),
   );
   const payAsYouGoPriceDisplay =
     formatPayAsYouGoPerImageLabel(paygPlans) ?? page.payAsYouGoPrice;
@@ -297,7 +373,6 @@ export function PricingPreview({ plans, pricingPage }: Props) {
               (!isFree
                 ? defaultPerImageLine(Number(plan.price), plan.creditsPerCycle)
                 : null);
-            const ctaLabel = meta.ctaLabel?.trim() ?? "";
             const badge = meta.badge?.trim();
 
             return (
@@ -362,32 +437,18 @@ export function PricingPreview({ plans, pricingPage }: Props) {
                   ))}
                 </ul>
 
-                {ctaLabel ? (
-                  <span
-                    className={`mt-6 block rounded-lg py-2.5 text-center text-sm font-semibold transition-colors ${
-                      highlight
-                        ? "text-white"
-                        : "border border-border text-muted-foreground"
-                    }`}
-                    style={
-                      highlight
-                        ? { backgroundColor: WEB.accent }
-                        : undefined
-                    }
-                  >
-                    {ctaLabel}
-                  </span>
-                ) : null}
+                <PreviewPlanCta meta={meta} highlight={highlight} />
               </div>
             );
           })}
         </div>
-        ) : gridPlans.length === 0 && paygPlans.length > 0 ? (
+        ) : gridPlans.length === 0 && quickEntryPlans.length > 0 ? (
           <p className="mt-16 text-center text-sm text-muted-foreground">
-            当前仅有「一次性」按量方案时，订阅类卡片区域为空；请点击下方「{page.payAsYouGoCta}」预览按量购买。
+            产品列表区暂无方案；快捷入口区有 {quickEntryPlans.length} 个方案，请点击下方「{page.payAsYouGoCta}」预览。
           </p>
         ) : null}
 
+        {(paygPlans.length > 0 || quickEntryCardPlans.length > 0) && (
         <div className="mt-12 rounded-2xl border border-border bg-card p-8 text-center">
           <h3 className="text-xl font-bold text-foreground">{page.payAsYouGoTitle}</h3>
           <p className="mt-2 text-muted-foreground">
@@ -395,21 +456,57 @@ export function PricingPreview({ plans, pricingPage }: Props) {
             <span className="font-semibold text-foreground">{payAsYouGoPriceDisplay}</span>
             {page.payAsYouGoTrail}
           </p>
+          {quickEntryCardPlans.length > 0 ? (
+            <div className="mx-auto mt-8 grid max-w-4xl gap-6 text-left md:grid-cols-2">
+              {quickEntryCardPlans.map((plan) => {
+                const meta = parseMeta(plan.metadata);
+                const highlight = meta.highlight === true;
+                const priceNum = Number(plan.price);
+                const isFree = !Number.isNaN(priceNum) && priceNum === 0;
+                const priceStr = formatMoney(priceNum, plan.currency);
+                const period = periodSuffix(plan.billingInterval);
+                return (
+                  <div
+                    key={plan.id}
+                    className={`relative flex flex-col rounded-2xl border p-6 ${
+                      highlight ? "glow-border glow" : "border-border bg-background/80"
+                    }`}
+                    style={highlight ? { borderColor: `${WEB.accent}99` } : undefined}
+                  >
+                    <h4 className="text-lg font-semibold text-foreground">{plan.name}</h4>
+                    <div className="mt-2">
+                      {isFree ? (
+                        <span className="text-2xl font-bold">free</span>
+                      ) : (
+                        <>
+                          <span className="text-2xl font-bold">{priceStr}</span>
+                          <span className="text-muted-foreground">{period}</span>
+                        </>
+                      )}
+                    </div>
+                    <PreviewPlanCta meta={meta} highlight={highlight} />
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+          {paygPlans.length > 0 ? (
           <button
             type="button"
             aria-expanded={paygPreviewOpen}
             onClick={() => setPaygPreviewOpen((o) => !o)}
-            className="mt-6 rounded-lg border px-8 py-2.5 text-sm font-semibold transition-colors hover:opacity-90"
+            className="mt-6 cursor-pointer rounded-xl border px-8 py-3 text-sm font-semibold shadow-sm transition-all duration-200 hover:opacity-90"
             style={{
-              borderColor: WEB.accent,
+              borderColor: WEB.accentLight,
               color: WEB.accentLight,
               backgroundColor: paygPreviewOpen ? `${WEB.accent}14` : undefined,
             }}
           >
             {page.payAsYouGoCta}
           </button>
+          ) : null}
 
-          {paygPreviewOpen ? (
+          {paygPreviewOpen && paygPlans.length > 0 ? (
             <div className="mt-6 border-t border-border pt-6 text-left">
               {paygPlans.length === 0 ? (
                 <p className="text-center text-sm text-muted-foreground">
@@ -452,6 +549,7 @@ export function PricingPreview({ plans, pricingPage }: Props) {
             </div>
           ) : null}
         </div>
+        )}
       </div>
     </div>
   );

@@ -27,6 +27,16 @@ function normalizePlanDescription(v: unknown): string | null | undefined {
   return null;
 }
 
+/** 支付链接：空串 → null（清空），未传 → undefined（保留旧值） */
+function normalizePaymentLink(
+  v: string | null | undefined,
+): string | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null) return null;
+  const t = v.trim();
+  return t === '' ? null : t;
+}
+
 @Injectable()
 export class PricingService {
   constructor(private prisma: PrismaService) {}
@@ -39,7 +49,7 @@ export class PricingService {
     });
     if (existing) throw new ConflictException('Plan slug already exists');
 
-    const { metadata, description, sortOrder, ...planRest } = dto;
+    const { metadata, description, sortOrder, paymentLink, ...planRest } = dto;
     let resolvedSort = sortOrder;
     if (resolvedSort === undefined) {
       const agg = await this.prisma.pricingPlan.aggregate({
@@ -49,11 +59,13 @@ export class PricingService {
       resolvedSort = (agg._max.sortOrder ?? -1) + 1;
     }
     const desc = normalizePlanDescription(description);
+    const payLink = normalizePaymentLink(paymentLink);
     return this.prisma.pricingPlan.create({
       data: {
         ...planRest,
         sortOrder: resolvedSort,
         ...(desc !== undefined ? { description: desc } : {}),
+        ...(payLink !== undefined ? { paymentLink: payLink } : {}),
         features: (dto.features ?? []) as Prisma.InputJsonValue,
         limits: (dto.limits ?? {}) as Prisma.InputJsonValue,
         ...(metadata !== undefined
@@ -90,13 +102,15 @@ export class PricingService {
 
   async updatePlan(id: string, dto: UpdatePlanDto) {
     await this.findOnePlan(id);
-    const { metadata, description, ...rest } = dto;
+    const { metadata, description, paymentLink, ...rest } = dto;
     const desc = normalizePlanDescription(description);
+    const payLink = normalizePaymentLink(paymentLink);
     return this.prisma.pricingPlan.update({
       where: { id },
       data: {
         ...rest,
         ...(desc !== undefined ? { description: desc } : {}),
+        ...(payLink !== undefined ? { paymentLink: payLink } : {}),
         ...(metadata !== undefined
           ? { metadata: metadata as Prisma.InputJsonValue }
           : {}),
@@ -175,6 +189,7 @@ export class PricingService {
         features: p.features,
         metadata: p.metadata,
         sortOrder: p.sortOrder,
+        paymentLink: p.paymentLink ?? null,
       })),
     };
   }

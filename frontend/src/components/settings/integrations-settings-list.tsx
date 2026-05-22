@@ -10,8 +10,15 @@ import { RemoveBgApiPanel } from "./remove-bg-api-panel";
 import { SmtpSettingsPanel } from "./smtp-settings-panel";
 import { KlingImageSettingsPanel } from "./kling-image-settings-panel";
 import { UpscaleSettingsPanel } from "./upscale-settings-panel";
+import { GumroadSettingsPanel } from "./gumroad-settings-panel";
 
-export type IntegrationChannelId = "linkmePay" | "clearbg" | "smtp" | "klingImage" | "replicate";
+export type IntegrationChannelId =
+  | "linkmePay"
+  | "gumroad"
+  | "clearbg"
+  | "smtp"
+  | "klingImage"
+  | "replicate";
 
 type OverviewSlice = {
   enabled: boolean;
@@ -21,6 +28,7 @@ type OverviewSlice = {
 type IntegrationsOverviewResponse = {
   clearbg: OverviewSlice;
   linkmePay: OverviewSlice;
+  gumroad: OverviewSlice;
   smtp: OverviewSlice;
   klingImage: OverviewSlice;
   replicate: OverviewSlice;
@@ -32,6 +40,11 @@ const CHANNELS: {
   summary: string;
 }[] = [
   { id: "linkmePay", name: "LinkMePay", summary: "代收；官网通过 Monitor 创建订单与回调验签" },
+  {
+    id: "gumroad",
+    name: "Gumroad",
+    summary: "产品销售 Ping；按 seller_id 验签，按 payment_link 匹配方案并发放积分",
+  },
   { id: "clearbg", name: "抠图上游 API", summary: "第三方去背服务；公开 POST /api/v1/clearbg 走此上游" },
   { id: "smtp", name: "发信 SMTP", summary: "验证码、通知模板等发信出口（全站一套）" },
   {
@@ -65,6 +78,25 @@ const HELP: Record<IntegrationChannelId, { title: string; body: ReactNode }> = {
           <span className="font-mono text-foreground">slug</span>；密钥不落浏览器。
         </p>
         <p className="text-xs">禁用后，所有应用的代收下单将返回服务不可用。</p>
+      </div>
+    ),
+  },
+  gumroad: {
+    title: "Gumroad 使用说明",
+    body: (
+      <div className="space-y-3 text-sm text-muted-foreground">
+        <p>
+          在 Gumroad → <strong className="text-foreground">Settings → Advanced</strong> 将 Ping endpoint 设为 Monitor 公网地址下的{" "}
+          <span className="font-mono text-foreground">/api/payment/webhooks/gumroad</span>。
+        </p>
+        <p>
+          填写本页的 <span className="font-mono text-foreground">Seller ID</span>，须与 Ping 体里的{" "}
+          <span className="font-mono text-foreground">seller_id</span> 一致。
+        </p>
+        <p>
+          各定价方案的「支付链接」填 Gumroad 产品 URL，Webhook 才能匹配方案；买家邮箱须与站内注册用户一致。
+        </p>
+        <p className="text-xs">未配置 seller_id 时，Ping 返回「Gumroad integration is not configured」。</p>
       </div>
     ),
   },
@@ -198,6 +230,7 @@ export function IntegrationsSettingsList({ appId }: { appId: string }) {
     if (!overview) return null;
     if (id === "clearbg") return overview.clearbg;
     if (id === "linkmePay") return overview.linkmePay;
+    if (id === "gumroad") return overview.gumroad ?? { enabled: false, configured: false };
     if (id === "klingImage") return overview.klingImage ?? { enabled: false, configured: false };
     if (id === "replicate")
       return overview.replicate ?? { enabled: false, configured: false };
@@ -213,6 +246,8 @@ export function IntegrationsSettingsList({ appId }: { appId: string }) {
     try {
       if (id === "linkmePay") {
         await apiPatch(`/apps/${appId}/integrations/linkme-pay`, { enabled: next });
+      } else if (id === "gumroad") {
+        await apiPatch(`/apps/${appId}/integrations/gumroad`, { enabled: next });
       } else if (id === "clearbg") {
         await apiPatch(`/apps/${appId}/clearbg-settings`, { enabled: next });
       } else if (id === "klingImage") {
@@ -326,6 +361,12 @@ export function IntegrationsSettingsList({ appId }: { appId: string }) {
           onClose={() => setEditOpen(null)}
         >
           <LinkmePaySettingsPanel appId={appId} variant="dialog" onSaved={afterPanelSave} />
+        </Modal>
+      ) : null}
+
+      {editOpen === "gumroad" ? (
+        <Modal open wide title="编辑 Gumroad" onClose={() => setEditOpen(null)}>
+          <GumroadSettingsPanel appId={appId} variant="dialog" onSaved={afterPanelSave} />
         </Modal>
       ) : null}
 

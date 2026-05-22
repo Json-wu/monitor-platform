@@ -21,6 +21,12 @@ import {
   type PricingPageCopy,
 } from "@/components/pricing-preview";
 import { PLAN_ICON_PRESETS, PlanPresetIcon } from "@/lib/plan-icon-presets";
+import {
+  defaultDisplaySlots,
+  DISPLAY_SLOTS,
+  parseDisplaySlots,
+  type DisplaySlot,
+} from "@/lib/pricing-plan-display";
 
 interface Plan {
   id: string;
@@ -35,6 +41,7 @@ interface Plan {
   isActive: boolean;
   sortOrder: number;
   metadata?: unknown;
+  paymentLink?: string | null;
 }
 
 const intervals = [
@@ -66,8 +73,13 @@ type PlanFormState = {
   perImageLine: string;
   ctaLabel: string;
   ctaHref: string;
+  ctaEnabled: boolean;
+  displayProductList: boolean;
+  displayQuickEntry: boolean;
   /** crown | sparkles | gem | award | "" */
   planIconPreset: string;
+  /** 第三方支付页直链（如 Gumroad 产品 URL） */
+  paymentLink: string;
 };
 
 const emptyPlan = (): PlanFormState => ({
@@ -86,12 +98,31 @@ const emptyPlan = (): PlanFormState => ({
   perImageLine: "",
   ctaLabel: "",
   ctaHref: "",
+  ctaEnabled: true,
+  displayProductList: true,
+  displayQuickEntry: false,
   planIconPreset: "",
+  paymentLink: "",
 });
 
-function readPlanMeta(metadata: unknown): Partial<PlanFormState> {
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return {};
+function slotsToFormFlags(
+  slots: DisplaySlot[],
+): Pick<PlanFormState, "displayProductList" | "displayQuickEntry"> {
+  return {
+    displayProductList: slots.includes("product_list"),
+    displayQuickEntry: slots.includes("quick_entry"),
+  };
+}
+
+function readPlanMeta(
+  metadata: unknown,
+  billingInterval: string,
+): Partial<PlanFormState> {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return slotsToFormFlags(defaultDisplaySlots(billingInterval));
+  }
   const m = metadata as Record<string, unknown>;
+  const slots = parseDisplaySlots(metadata, billingInterval);
   return {
     highlight: m.highlight === true,
     badge: typeof m.badge === "string" ? m.badge : "",
@@ -99,7 +130,9 @@ function readPlanMeta(metadata: unknown): Partial<PlanFormState> {
     perImageLine: typeof m.perImageLine === "string" ? m.perImageLine : "",
     ctaLabel: typeof m.ctaLabel === "string" ? m.ctaLabel : "",
     ctaHref: typeof m.ctaHref === "string" ? m.ctaHref : "",
+    ctaEnabled: m.ctaEnabled !== false,
     planIconPreset: typeof m.planIconPreset === "string" ? m.planIconPreset : "",
+    ...slotsToFormFlags(slots),
   };
 }
 
@@ -110,9 +143,20 @@ function buildPlanMetadata(f: PlanFormState): Record<string, unknown> {
   if (f.perImageLine.trim()) out.perImageLine = f.perImageLine.trim();
   if (f.ctaLabel.trim()) out.ctaLabel = f.ctaLabel.trim();
   if (f.ctaHref.trim()) out.ctaHref = f.ctaHref.trim();
+  if (!f.ctaEnabled) out.ctaEnabled = false;
   if (f.planIconPreset.trim()) out.planIconPreset = f.planIconPreset.trim();
+  const slots: DisplaySlot[] = [];
+  if (f.displayProductList) slots.push("product_list");
+  if (f.displayQuickEntry) slots.push("quick_entry");
+  out.displaySlots =
+    slots.length > 0 ? slots : defaultDisplaySlots(f.billingInterval);
   return out;
 }
+
+const displaySlotLabel: Record<DisplaySlot, string> = {
+  product_list: "产品列表",
+  quick_entry: "快捷入口",
+};
 
 export default function PricingPage() {
   const app = useCurrentApp();
@@ -167,7 +211,7 @@ export default function PricingPage() {
   }
 
   function openEditPlan(p: Plan) {
-    const meta = readPlanMeta(p.metadata);
+    const meta = readPlanMeta(p.metadata, p.billingInterval);
     setEditingPlan(p);
     setPlanForm({
       sortOrder: String(p.sortOrder ?? 0),
@@ -185,7 +229,11 @@ export default function PricingPage() {
       perImageLine: meta.perImageLine ?? "",
       ctaLabel: meta.ctaLabel ?? "",
       ctaHref: meta.ctaHref ?? "",
+      ctaEnabled: meta.ctaEnabled ?? true,
+      displayProductList: meta.displayProductList ?? true,
+      displayQuickEntry: meta.displayQuickEntry ?? false,
       planIconPreset: meta.planIconPreset ?? "",
+      paymentLink: p.paymentLink ?? "",
     });
     setPlanModal(true);
   }
@@ -208,6 +256,7 @@ export default function PricingPage() {
       }
       const metadata = buildPlanMetadata(planForm);
       const descriptionTrimmed = planForm.description.trim();
+      const paymentLinkTrimmed = planForm.paymentLink.trim();
       const body: Record<string, unknown> = {
         name: planForm.name,
         billingInterval: planForm.billingInterval,
@@ -217,6 +266,7 @@ export default function PricingPage() {
         /** Explicit `null` clears DB; omitting left the old value; empty must not become "0". */
         description: descriptionTrimmed === "" ? null : descriptionTrimmed,
         features: planForm.features ? planForm.features.split("\n").filter(Boolean) : [],
+        paymentLink: paymentLinkTrimmed === "" ? null : paymentLinkTrimmed,
         metadata,
       };
       if (sortTrim !== "") {
@@ -383,6 +433,7 @@ export default function PricingPage() {
                 <th>名称</th>
                 <th>价格</th>
                 <th>周期</th>
+                <th>展示位</th>
                 <th>积分</th>
                 <th>启用</th>
                 <th>操作</th>
@@ -391,7 +442,7 @@ export default function PricingPage() {
             <tbody>
               {plans.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center text-muted-foreground">
+                  <td colSpan={8} className="text-center text-muted-foreground">
                     暂无方案
                   </td>
                 </tr>
@@ -403,6 +454,11 @@ export default function PricingPage() {
                     <td>${p.price}</td>
                     <td>
                       <span className="badge">{billingIntervalLabel[p.billingInterval] ?? p.billingInterval}</span>
+                    </td>
+                    <td className="text-xs text-muted-foreground">
+                      {parseDisplaySlots(p.metadata, p.billingInterval)
+                        .map((s) => displaySlotLabel[s])
+                        .join("、")}
                     </td>
                     <td>{p.creditsPerCycle}</td>
                     <td>
@@ -505,7 +561,15 @@ export default function PricingPage() {
               <select
                 className="input"
                 value={planForm.billingInterval}
-                onChange={(e) => setPlanForm({ ...planForm, billingInterval: e.target.value })}
+                onChange={(e) => {
+                  const billingInterval = e.target.value;
+                  if (!editingPlan) {
+                    const flags = slotsToFormFlags(defaultDisplaySlots(billingInterval));
+                    setPlanForm({ ...planForm, billingInterval, ...flags });
+                  } else {
+                    setPlanForm({ ...planForm, billingInterval });
+                  }
+                }}
               >
                 {intervals.map((i) => (
                   <option key={i.value} value={i.value}>
@@ -542,10 +606,57 @@ export default function PricingPage() {
             />
           </FormField>
 
+          <FormField
+            label="支付链接"
+            hint="第三方支付页直链，例如 Gumroad 产品 URL；前端定价卡片可直接跳转购买，Gumroad Webhook 据此匹配方案发放积分"
+          >
+            <input
+              className="input"
+              value={planForm.paymentLink}
+              onChange={(e) => setPlanForm({ ...planForm, paymentLink: e.target.value })}
+              placeholder="https://username.gumroad.com/l/abcde"
+            />
+          </FormField>
+
+          <FormField
+            label="展示位"
+            hint="产品列表=订阅卡片区；快捷入口=订阅区下方按量/快捷购买区。未勾选任一项时保存将按计费周期写入默认展示位。"
+          >
+            <div className="flex flex-wrap gap-4">
+              {DISPLAY_SLOTS.map((slot) => {
+                const checked =
+                  slot.value === "product_list"
+                    ? planForm.displayProductList
+                    : planForm.displayQuickEntry;
+                return (
+                  <label
+                    key={slot.value}
+                    className="flex cursor-pointer items-center gap-2 text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        const on = e.target.checked;
+                        if (slot.value === "product_list") {
+                          setPlanForm({ ...planForm, displayProductList: on });
+                        } else {
+                          setPlanForm({ ...planForm, displayQuickEntry: on });
+                        }
+                      }}
+                      className="rounded border-border"
+                    />
+                    {slot.label}
+                  </label>
+                );
+              })}
+            </div>
+          </FormField>
+
           <div className="border-t border-border pt-4">
             <p className="mb-3 text-sm font-medium text-foreground">Web 端卡片展示</p>
             <p className="mb-3 text-xs text-muted-foreground">
-              与站点定价卡一致：高亮边框、角标、次行文案、按钮文案。留空则按价格/额度自动推算。
+              与站点定价卡一致：高亮边框、角标、次行文案、按钮。留空文案则按价格/额度自动推算；未配置链接且启用按钮时，站点可走代收下单。
             </p>
             <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm">
               <input
@@ -578,7 +689,7 @@ export default function PricingPage() {
                   onChange={(e) => setPlanForm({ ...planForm, perImageLine: e.target.value })}
                 />
               </FormField>
-              <FormField label="按钮文案" hint="留空则预览不显示按钮">
+              <FormField label="按钮文案" hint="留空则站点不显示按钮">
                 <input
                   className="input"
                   value={planForm.ctaLabel}
@@ -586,15 +697,27 @@ export default function PricingPage() {
                   placeholder="Get Started"
                 />
               </FormField>
-              <FormField label="按钮链接路径" hint="站点内路径，如 / 或 /pricing">
+              <FormField
+                label="按钮链接"
+                hint="站内路径如 /pricing；站外 https:// 开头：需登录后新标签页打开，并自动追加 user_id=用户UUID"
+              >
                 <input
                   className="input"
                   value={planForm.ctaHref}
                   onChange={(e) => setPlanForm({ ...planForm, ctaHref: e.target.value })}
-                  placeholder="#"
+                  placeholder="/pricing 或 https://..."
                 />
               </FormField>
             </div>
+            <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={planForm.ctaEnabled}
+                onChange={(e) => setPlanForm({ ...planForm, ctaEnabled: e.target.checked })}
+                className="rounded border-border"
+              />
+              启用按钮（关闭后站点显示灰色不可点）
+            </label>
 
             <div>
               <p className="mb-2 text-sm text-foreground">方案图标</p>

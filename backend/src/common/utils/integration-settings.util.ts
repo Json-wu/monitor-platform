@@ -22,9 +22,23 @@ export type LinkmePayIntegration = {
   notifyPublicBase?: string;
 };
 
+/**
+ * Gumroad 集成：Ping/Webhook 通过 `seller_id` 校验来源；按 `PricingPlan.paymentLink`
+ * 匹配商品并发放积分。Gumroad 在「Advanced → Ping」配置 URL：
+ *   `${notifyPublicBase}/api/payment/webhooks/gumroad`
+ *
+ * 说明：sellerId 为 Gumroad 卖家账号 ID（在 ping payload 与产品 URL 中均可见）。
+ */
+export type GumroadIntegration = {
+  enabled?: boolean;
+  /** Gumroad seller_id；ping 体中需包含且与此一致 */
+  sellerId?: string;
+};
+
 export type AppIntegrationsRoot = {
   removeBackground?: RemoveBackgroundIntegration;
   linkmePay?: LinkmePayIntegration;
+  gumroad?: GumroadIntegration;
 };
 
 export function readIntegrationsRoot(settings: unknown): AppIntegrationsRoot {
