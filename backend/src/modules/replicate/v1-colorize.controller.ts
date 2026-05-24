@@ -33,7 +33,6 @@ export class V1ColorizeController {
   @Public()
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: '黑白图上色（DDColor / Replicate）' })
-  @ApiHeader({ name: 'X-App-Key', required: true, description: '应用 API Key（Monitor 应用详情 / Application.apiKey）' })
   @ApiHeader({ name: 'X-Api-Key', required: false, description: '终端用户 API Key（第三方 API 调用传入，用于扣除积分）' })
   @ApiHeader({ name: 'X-User-Id', required: false, description: '终端用户唯一标识（站内代理传入，用于扣除积分）' })
   @ApiBody({ schema: { type: 'object', properties: { image: { type: 'string' }, model: { type: 'string', enum: ['large', 'tiny'] } }, required: ['image'] } })
@@ -41,14 +40,13 @@ export class V1ColorizeController {
   @UseInterceptors(FileInterceptor('image'))
   async colorize(
     @Req() req: Request,
-    @Headers('x-app-key') appKeyHeader: string | undefined,
     @Headers('x-user-id') endUserId: string | undefined,
     @Headers('x-api-key') endUserApiKey: string | undefined,
     @UploadedFile(new ParseFilePipe({ fileIsRequired: false, validators: [new MaxFileSizeValidator({ maxSize: 25 * 1024 * 1024 })] }))
     file: Express.Multer.File | undefined,
     @Body() body: ColorizeMultipartFieldsDto,
   ): Promise<{ outputUrl: string }> {
-    const app = await this.appGate.findAppByApplicationApiKeyOrThrow(appKeyHeader?.trim());
+    const app = await this.appGate.findAppByApplicationSlugOrThrow('colorizerai');
     const image = await this.appGate.resolveColorizeImageString(file, body);
     return this.appGate.withUpscalePublicCredits(
       req,

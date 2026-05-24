@@ -780,13 +780,13 @@ export class RemoveBackgroundService {
   /**
    * 抠图 / 生图 generate 等：请求头 `X-App-Key`（兼容旧客户端 `X-App-Id`）值为 **Application.apiKey**。
    */
-  async findAppByApplicationApiKeyOrThrow(
-    applicationApiKey: string | undefined,
+  async findAppByApplicationSlugOrThrow(
+    applicationSlug: string | undefined,
   ): Promise<Application> {
-    const k = applicationApiKey?.trim();
-    if (!k) throw new BadRequestException('Invalid or missing X-App-Key');
+    const k = applicationSlug?.trim();
+    if (!k) throw new BadRequestException('Invalid or missing X-App-Slug');
     const app = await this.prisma.application.findUnique({
-      where: { apiKey: k },
+      where: { slug: k },
     });
     if (!app) throw new NotFoundException('Application not found');
     return app;
