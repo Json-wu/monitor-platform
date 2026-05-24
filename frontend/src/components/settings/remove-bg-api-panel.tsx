@@ -197,7 +197,7 @@ export function RemoveBgApiPanel({
 
       <SectionCard
         title="前端对接"
-        tips="公开抠图接口为 POST /api/v1/clearbg（应用 slug 为 clearbg）。计费用户须在请求头携带终端用户 UUID：`X-User-Id`（与可灵生图公开接口一致）；其它需应用鉴权的接口仍使用应用级 X-App-Key。"
+        tips="公开抠图接口为 POST /api/v1/clearbg（应用 slug 为 clearbg）。计费用户须在请求头携带终端用户 UUID：`X-User-Id`（与可灵生图公开接口一致）；其它需应用鉴权的接口仍使用应用级 X-App-Slug。"
       >
         <div className="space-y-3 text-sm">
           <div className="flex items-start gap-2 rounded-lg bg-muted/40 px-3 py-2 font-mono text-xs break-all">

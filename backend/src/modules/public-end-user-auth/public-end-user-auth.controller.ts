@@ -313,7 +313,7 @@ export class PublicEndUserAuthController {
     summary: '当前终端用户资料',
     description:
       '需 `Authorization: Bearer <终端用户 JWT>`。\n\n' +
-      '返回 `user`：含积分分池、`planLabel`、订阅摘要、`appKey`（与 `X-App-Key` 同源）、`apiKeyMasked`（终端用户 API Key 脱敏，明文仅在 generate/regenerate 出现一次）。',
+      '返回 `user`：含积分分池、`planLabel`、订阅摘要、`appSlug`（与 `X-App-Slug` 同源）、`apiKeyMasked`（终端用户 API Key 脱敏，明文仅在 generate/regenerate 出现一次）。',
   })
   @ApiOkResponse({ type: MeResponseDto, description: '当前会话用户' })
   @ApiUnauthorizedResponse({

@@ -322,7 +322,7 @@ export class KlingImageService {
           groupType: 1,
           resultType: 'text',
           values: {
-            text: `任务已创建，请使用 GET /api/public/image-generation/tasks/${encodeURIComponent(taskId)} 轮询（Query slug + Header X-App-Key）。taskId 含 gen:/mi2i: 前缀以区分官方查询路径。`,
+            text: `任务已创建，请使用 GET /api/public/image-generation/tasks/${encodeURIComponent(taskId)} 轮询（Query slug + Header X-App-Slug）。taskId 含 gen:/mi2i: 前缀以区分官方查询路径。`,
           },
         },
         {

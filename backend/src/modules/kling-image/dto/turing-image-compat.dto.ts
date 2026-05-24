@@ -5,7 +5,7 @@ import { IsBoolean, IsNumber, IsObject, IsOptional } from 'class-validator';
  * 图灵机器人 OpenAPI v2 风格壳（仅取 perception / reqType），映射到可灵官方图像接口（按参考图数自动单图/多图）。
  * - perception.inputText.text → 提示词
  * - perception.inputImage：单对象 `{ url }` 或多对象 `{ url }[]` 作为参考图
- * - userInfo 不参与鉴权（公开接口仍使用 X-App-Key + slug）
+ * - userInfo 不参与鉴权（公开接口仍使用 X-App-Slug + slug）
  */
 export class TuringImageCompatDto {
   @ApiPropertyOptional({ description: '输入类型，0=文本（默认）' })

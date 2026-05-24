@@ -224,7 +224,7 @@ export function LinkmePaySettingsPanel({
 
       <SectionCard
         title="公开代收接口"
-        tips="官网应调用下方地址创建代收订单；需 Header X-App-Key、Query slug（真实值见应用列表或环境变量，此处 xxx 占位）。JSON Body 仅含三项：planId（定价方案 UUID）、payerId（终端用户 UUID）、quantity（订阅类须为 1，按量包为购买份数）。"
+        tips="官网应调用下方地址创建代收订单；需 Header X-App-Slug、Query slug（真实值见应用列表或环境变量，此处 xxx 占位）。JSON Body 仅含三项：planId（定价方案 UUID）、payerId（终端用户 UUID）、quantity（订阅类须为 1，按量包为购买份数）。"
       >
         <div className="space-y-3 text-sm">
           <div className="flex items-start gap-2 rounded-lg bg-muted/40 px-3 py-2 font-mono text-xs break-all">
@@ -237,7 +237,7 @@ export function LinkmePaySettingsPanel({
           <FormField label="应用标识（slug）" hint="请在应用列表或环境变量中查看真实 slug">
             <input className="input w-full max-w-md font-mono text-xs" readOnly value="xxx" />
           </FormField>
-          <FormField label="应用密钥（X-App-Key）" hint="请在应用列表复制 APP Key，勿在集成页拉取完整应用信息">
+          <FormField label="应用 slug（X-App-Slug）" hint="请在应用列表查看 slug，与 APP_SLUG / 请求头 X-App-Slug 一致">
             <input className="input w-full max-w-md font-mono text-xs" readOnly value="xxx" />
           </FormField>
         </div>

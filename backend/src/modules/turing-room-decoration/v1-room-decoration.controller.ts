@@ -33,7 +33,7 @@ import {
  * 房间装修图：`POST /api/v1/room-decoration/generate`
  * 后端按主题依次**创建**可灵单图参考任务，不轮询出图；每主题返回 `taskId`（及 `createResponse`），客户端用
  * `GET /api/v1/room-decoration/tasks/:taskId` 轮询。`model_name` 来自 `roomDecorationModelId` 或「房间装修图默认模型」。
- * 鉴权：`X-App-Key` 必填；`X-Api-Key` / `X-User-Id` 可选（按去重后主题数 1～4 扣分）。
+ * 鉴权：`X-App-Slug` 必填；`X-Api-Key` / `X-User-Id` 可选（按去重后主题数 1～4 扣分）。
  */
 @ApiTags('公开 · 可灵图像生成')
 @Controller('v1/room-decoration')
@@ -56,9 +56,9 @@ export class V1RoomDecorationController {
       '积分：已识别用户按主题数扣 1～4 分，失败退回；匿名与公开可灵共用日限表。',
   })
   @ApiHeader({
-    name: 'X-App-Key',
+    name: 'X-App-Slug',
     required: true,
-    description: '应用 API Key（**Application.apiKey**）',
+    description: '应用 slug（**Application.slug**）',
   })
   @ApiHeader({
     name: 'X-Api-Key',
@@ -113,13 +113,13 @@ export class V1RoomDecorationController {
   })
   async generate(
     @Req() req: Request,
-    @Headers('x-app-key') appKeyHeader: string | undefined,
+    @Headers('x-app-slug') appSlugHeader: string | undefined,
     @Headers('x-user-id') endUserId: string | undefined,
     @Headers('x-api-key') endUserApiKey: string | undefined,
     @Body() dto: RoomDecorationGenerateDto,
   ): Promise<unknown> {
-    const app = await this.appGate.findAppByApplicationApiKeyOrThrow(
-      appKeyHeader?.trim(),
+    const app = await this.appGate.findAppByApplicationSlugOrThrow(
+      appSlugHeader?.trim(),
     );
     const uniqueThemes = dedupeRoomDecorationThemes(dto.themes);
     if (uniqueThemes.length < 1 || uniqueThemes.length > 4) {
@@ -145,12 +145,12 @@ export class V1RoomDecorationController {
     summary: '查询房间装修图单主题可灵任务',
     description:
       '对 `POST /generate` 返回的 `taskId` 轮询任务进度（与公开 `GET .../public/image-generation/tasks/:taskId` 返回体相同）。' +
-      ' 鉴权仅需 `X-App-Key`；不另扣积分。',
+      ' 鉴权仅需 `X-App-Slug`；不另扣积分。',
   })
   @ApiHeader({
-    name: 'X-App-Key',
+    name: 'X-App-Slug',
     required: true,
-    description: '应用 API Key（**Application.apiKey**）',
+    description: '应用 slug（**Application.slug**）',
   })
   @ApiParam({
     name: 'taskId',
@@ -163,10 +163,10 @@ export class V1RoomDecorationController {
   })
   async getTaskStatus(
     @Param('taskId') taskId: string | undefined,
-    @Headers('x-app-key') appKeyHeader: string | undefined,
+    @Headers('x-app-slug') appSlugHeader: string | undefined,
   ) {
-    await this.appGate.findAppByApplicationApiKeyOrThrow(
-      appKeyHeader?.trim(),
+    await this.appGate.findAppByApplicationSlugOrThrow(
+      appSlugHeader?.trim(),
     );
     const tid = taskId?.trim();
     if (!tid) throw new BadRequestException('taskId is required');

@@ -291,7 +291,7 @@ export function KlingImageSettingsPanel({
 
       <SectionCard
         title="公开接口（应用鉴权 + 积分）"
-        tips="Query `slug` + Header `X-App-Key`（应用）。可选 `X-User-Id`（终端用户 UUID，与抠图 `/api/v1/clearbg` 相同）：识别到用户则每次生图扣 1 积分，余额不足不调用可灵；失败退回。未带时与抠图共用匿名日限：同一应用、同一 IP 每 UTC 日共 1 次免费。`sync:false` 时 taskId 含 gen:/mi2i: 前缀。"
+        tips="Query `slug` + Header `X-App-Slug`（应用）。可选 `X-User-Id`（终端用户 UUID，与抠图 `/api/v1/clearbg` 相同）：识别到用户则每次生图扣 1 积分，余额不足不调用可灵；失败退回。未带时与抠图共用匿名日限：同一应用、同一 IP 每 UTC 日共 1 次免费。`sync:false` 时 taskId 含 gen:/mi2i: 前缀。"
       >
         <div className="space-y-3 text-sm">
           <div className="flex items-start gap-2 rounded-lg bg-muted/40 px-3 py-2 font-mono text-xs break-all">
@@ -312,7 +312,7 @@ export function KlingImageSettingsPanel({
             <Plug className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
             <div>
               <div className="text-muted-foreground">
-                房间装修图（X-App-Key）：POST 仅创建任务；用 GET {base}/v1/room-decoration/tasks/{"{taskId}"} 轮询进度
+                房间装修图（X-App-Slug）：POST 仅创建任务；用 GET {base}/v1/room-decoration/tasks/{"{taskId}"} 轮询进度
               </div>
               <div>{roomDecoUrl}</div>
             </div>

@@ -4,6 +4,10 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 export const SITE_SLUG_QUERY_DESC =
   '应用 slug，须与后台「应用」中的 **Application.slug** 一致。';
 
+/** Header `X-App-Slug`：与 Monitor 应用 Application.slug 一致 */
+export const SITE_APP_SLUG_HEADER_DESC =
+  '应用 slug，须与后台「应用」中的 **Application.slug** 一致。';
+
 // ─── GET /public/pricing ─────────────────────────────────────
 
 export class PublicPricingAppSummaryDto {

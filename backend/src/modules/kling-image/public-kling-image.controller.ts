@@ -22,6 +22,7 @@ import type { Request } from 'express';
 import {
   KlingGenerateSyncResponseDto,
   KlingTaskStatusEnvelopeDto,
+  SITE_APP_SLUG_HEADER_DESC,
   SITE_SLUG_QUERY_DESC,
   TuringCompatSyncResponseDto,
 } from '../../common/swagger/public-site-api.dto';
@@ -44,12 +45,12 @@ export class PublicKlingImageController {
   @ApiOperation({
     summary: '文生图 / 参考图生图（简化 JSON）',
     description:
-      '必填 `X-App-Key`（Monitor 应用 API Key）。可选 `X-Api-Key` / `X-User-Id` 识别终端用户并扣 1 积分；未识别时同一 IP 每 UTC 日共 1 次免费。',
+      '必填 `X-App-Slug`（Monitor 应用 slug）。可选 `X-Api-Key` / `X-User-Id` 识别终端用户并扣 1 积分；未识别时同一 IP 每 UTC 日共 1 次免费。',
   })
   @ApiHeader({
-    name: 'X-App-Key',
+    name: 'X-App-Slug',
     required: true,
-    description: '应用 API Key（Application.apiKey）',
+    description: '应用 slug（Application.slug）',
   })
   @ApiHeader({
     name: 'X-User-Id',
@@ -65,7 +66,7 @@ export class PublicKlingImageController {
   @ApiOkResponse({
     type: KlingGenerateSyncResponseDto,
     description:
-      '**sync=true（默认）**：轮询完成后返回 `taskId` + `imageUrls` + `task`（官方查询封装）。**sync=false**：仅创建，返回 `taskId` + `createResponse`，须再调 GET `tasks/:taskId`（带 slug + X-App-Key）。`taskId` 含 `gen:`（单图）或 `mi2i:`（多图）前缀。',
+      '**sync=true（默认）**：轮询完成后返回 `taskId` + `imageUrls` + `task`（官方查询封装）。**sync=false**：仅创建，返回 `taskId` + `createResponse`，须再调 GET `tasks/:taskId`（带 slug + X-App-Slug）。`taskId` 含 `gen:`（单图）或 `mi2i:`（多图）前缀。',
     content: {
       'application/json': {
         examples: {
@@ -91,13 +92,12 @@ export class PublicKlingImageController {
   async generate(
     @Req() req: Request,
     @Headers('x-user-id') endUserId: string | undefined,
-    @Headers('x-app-key') appKey: string | undefined,
+    @Headers('x-app-slug') appSlug: string | undefined,
     @Headers('x-api-key') endUserApiKey: string | undefined,
     @Body() dto: KlingImageGenerateDto,
   ) {
-    const applicationApiKey =appKey?.trim();
-    const app = await this.appGate.findAppByApplicationApiKeyOrThrow(
-      applicationApiKey,
+    const app = await this.appGate.findAppByApplicationSlugOrThrow(
+      appSlug?.trim(),
     );
     return this.appGate.withKlingImagePublicCredits(
       req,
@@ -116,9 +116,9 @@ export class PublicKlingImageController {
   })
   @ApiQuery({ name: 'slug', required: true, description: SITE_SLUG_QUERY_DESC })
   @ApiHeader({
-    name: 'X-App-Key',
+    name: 'X-App-Slug',
     required: true,
-    description: '应用 API Key（**Application.apiKey**），须与 slug 对应应用一致',
+    description: SITE_APP_SLUG_HEADER_DESC,
   })
   @ApiHeader({
     name: 'X-User-Id',
@@ -173,14 +173,14 @@ export class PublicKlingImageController {
   async turingCompat(
     @Req() req: Request,
     @Query('slug') slug: string | undefined,
-    @Headers('x-app-key') apiKey: string | undefined,
+    @Headers('x-app-slug') appSlug: string | undefined,
     @Headers('x-user-id') endUserId: string | undefined,
     @Body() dto: TuringImageCompatDto,
   ) {
+    const app = await this.appGate.findAppByApplicationSlugOrThrow(appSlug?.trim());
     const s = slug?.trim();
     if (!s) throw new BadRequestException('Query slug is required');
-    const app = await this.appGate.findAppBySlugOrThrow(s);
-    this.appGate.assertAppKey(app, apiKey);
+    this.appGate.assertAppSlug(app, s);
     return this.appGate.withKlingImagePublicCredits(
       req,
       app,
@@ -198,9 +198,9 @@ export class PublicKlingImageController {
   })
   @ApiQuery({ name: 'slug', required: true, description: SITE_SLUG_QUERY_DESC })
   @ApiHeader({
-    name: 'X-App-Key',
+    name: 'X-App-Slug',
     required: true,
-    description: '应用 API Key（**Application.apiKey**），须与 slug 对应应用一致',
+    description: SITE_APP_SLUG_HEADER_DESC,
   })
   @ApiParam({
     name: 'taskId',
@@ -223,14 +223,14 @@ export class PublicKlingImageController {
   async getTask(
     @Param('taskId') taskId: string | undefined,
     @Query('slug') slug: string | undefined,
-    @Headers('x-app-key') apiKey: string | undefined,
+    @Headers('x-app-slug') appSlug: string | undefined,
   ) {
     const tid = taskId?.trim();
     if (!tid) throw new BadRequestException('taskId is required');
+    const app = await this.appGate.findAppByApplicationSlugOrThrow(appSlug?.trim());
     const s = slug?.trim();
     if (!s) throw new BadRequestException('Query slug is required');
-    const app = await this.appGate.findAppBySlugOrThrow(s);
-    this.appGate.assertAppKey(app, apiKey);
+    this.appGate.assertAppSlug(app, s);
     return this.kling.getTaskStatus(tid);
   }
 }

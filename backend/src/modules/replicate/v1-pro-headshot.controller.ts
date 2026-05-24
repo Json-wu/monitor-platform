@@ -39,7 +39,7 @@ export class V1ProHeadshotController {
   @Public()
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: '生成专业证件照（Replicate）' })
-  @ApiHeader({ name: 'X-App-Key', required: true, description: '应用 API Key（Monitor 应用详情 / Application.apiKey）' })
+  @ApiHeader({ name: 'X-App-Slug', required: true, description: '应用 slug（Monitor 应用详情 / Application.slug）' })
   @ApiHeader({ name: 'X-Api-Key', required: false, description: '终端用户 API Key（用于扣除积分）' })
   @ApiHeader({ name: 'X-User-Id', required: false, description: '终端用户唯一标识（站内代理，用于扣除积分）' })
   @ApiBody({
@@ -67,14 +67,14 @@ export class V1ProHeadshotController {
   @UseInterceptors(FileInterceptor('image'))
   async proHeadshot(
     @Req() req: Request,
-    @Headers('x-app-key') appKeyHeader: string | undefined,
+    @Headers('x-app-slug') appSlugHeader: string | undefined,
     @Headers('x-user-id') endUserId: string | undefined,
     @Headers('x-api-key') endUserApiKey: string | undefined,
     @UploadedFile(new ParseFilePipe({ fileIsRequired: false, validators: [new MaxFileSizeValidator({ maxSize: 25 * 1024 * 1024 })] }))
     file: Express.Multer.File | undefined,
     @Body() body: ProHeadshotMultipartFieldsDto,
   ): Promise<{ outputUrls: string[] }> {
-    const app = await this.appGate.findAppByApplicationApiKeyOrThrow(appKeyHeader?.trim());
+    const app = await this.appGate.findAppByApplicationSlugOrThrow(appSlugHeader?.trim());
     const image = await this.appGate.resolveColorizeImageString(file, body);
     const outputs = Number(body.outputs ?? '1');
     const creditAmount = outputs === 2 || outputs === 4 ? outputs : 1;

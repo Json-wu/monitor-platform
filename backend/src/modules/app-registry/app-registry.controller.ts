@@ -220,7 +220,7 @@ export class AppRegistryController {
 
   @Post(':id/rotate-key')
   @Permissions('apps:edit')
-  @ApiOperation({ summary: '轮换应用 API Key（X-App-Key）' })
+  @ApiOperation({ summary: '轮换应用 API Key' })
   @ApiParam({ name: 'id', description: '应用 UUID' })
   rotateApiKey(@Param('id') id: string) {
     return this.service.rotateApiKey(id);

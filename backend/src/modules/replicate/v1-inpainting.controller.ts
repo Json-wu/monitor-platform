@@ -34,7 +34,7 @@ export class V1InpaintingController {
   @Public()
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: '圈选区域物体移除（LaMa / Replicate Inpainting）' })
-  @ApiHeader({ name: 'X-App-Key', required: true, description: '应用 API Key（Monitor 应用详情 / Application.apiKey）' })
+  @ApiHeader({ name: 'X-App-Slug', required: true, description: '应用 slug（Monitor 应用详情 / Application.slug）' })
   @ApiHeader({ name: 'X-Api-Key', required: false, description: '终端用户 API Key（用于扣除积分）' })
   @ApiHeader({ name: 'X-User-Id', required: false, description: '终端用户唯一标识（站内代理，用于扣除积分）' })
   @ApiBody({ schema: { type: 'object', properties: { image: { type: 'string' }, mask: { type: 'string' } }, required: ['image', 'mask'] } })
@@ -42,13 +42,13 @@ export class V1InpaintingController {
   @UseInterceptors(FileFieldsInterceptor([{ name: 'image', maxCount: 1 }, { name: 'mask', maxCount: 1 }]))
   async inpainting(
     @Req() req: Request,
-    @Headers('x-app-key') appKeyHeader: string | undefined,
+    @Headers('x-app-slug') appSlugHeader: string | undefined,
     @Headers('x-user-id') endUserId: string | undefined,
     @Headers('x-api-key') endUserApiKey: string | undefined,
     @UploadedFiles() files: { image?: Express.Multer.File[]; mask?: Express.Multer.File[] } | undefined,
     @Body() body: InpaintingMultipartFieldsDto,
   ): Promise<{ outputUrl: string }> {
-    const app = await this.appGate.findAppByApplicationApiKeyOrThrow(appKeyHeader?.trim());
+    const app = await this.appGate.findAppByApplicationSlugOrThrow(appSlugHeader?.trim());
     const imageFile = files?.image?.[0];
     const maskFile = files?.mask?.[0];
     if (imageFile?.buffer?.length && imageFile.buffer.length > INPAINT_MAX_BYTES) throw new BadRequestException('image file exceeds size limit');

@@ -777,27 +777,12 @@ export class RemoveBackgroundService {
     return app;
   }
 
-  /**
-   * 抠图 / 生图 generate 等：请求头 `X-App-Key` 值为 **Application.apiKey**。
-   */
-  async findAppByApplicationApiKeyOrThrow(
-    applicationApiKey: string | undefined,
-  ): Promise<Application> {
-    const k = applicationApiKey?.trim();
-    if (!k) throw new BadRequestException('Invalid or missing X-App-Key');
-    const app = await this.prisma.application.findUnique({
-      where: { apiKey: k },
-    });
-    if (!app) throw new NotFoundException('Application not found');
-    return app;
-  }
-
-  /** colorize 等固定 slug 场景：按 Application.slug 解析。 */
+  /** 公开网关：请求头 `X-App-Slug` 值为 **Application.slug**。 */
   async findAppByApplicationSlugOrThrow(
     applicationSlug: string | undefined,
   ): Promise<Application> {
     const k = applicationSlug?.trim();
-    if (!k) throw new BadRequestException('Invalid or missing application slug');
+    if (!k) throw new BadRequestException('Invalid or missing X-App-Slug');
     const app = await this.prisma.application.findUnique({
       where: { slug: k },
     });
@@ -805,10 +790,11 @@ export class RemoveBackgroundService {
     return app;
   }
 
-  assertAppKey(app: Application, apiKey: string | undefined): void {
-    const k = apiKey?.trim();
-    if (!k || !app.apiKey || k !== app.apiKey) {
-      throw new UnauthorizedException('Invalid or missing X-App-Key');
+  /** Query slug 须与已解析应用一致（query + header 双参接口）。 */
+  assertAppSlug(app: Application, slug: string | undefined): void {
+    const s = slug?.trim();
+    if (!s || s !== app.slug) {
+      throw new UnauthorizedException('X-App-Slug does not match query slug');
     }
   }
 }

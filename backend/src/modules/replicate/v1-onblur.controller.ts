@@ -40,7 +40,7 @@ export class V1OnblurController {
   @Public()
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: '模糊图片转高清（自动路由超分模型）' })
-  @ApiHeader({ name: 'X-App-Key', required: true, description: '应用 API Key（Monitor 应用详情 / Application.apiKey）' })
+  @ApiHeader({ name: 'X-App-Slug', required: true, description: '应用 slug（Monitor 应用详情 / Application.slug）' })
   @ApiHeader({ name: 'X-Api-Key', required: false, description: '终端用户 API Key（第三方 API 调用传入，用于扣除积分）' })
   @ApiHeader({ name: 'X-User-Id', required: false, description: '终端用户唯一标识（站内代理传入，用于扣除积分）' })
   @ApiBody({
@@ -59,14 +59,14 @@ export class V1OnblurController {
   @UseInterceptors(FileInterceptor('image'))
   async unblur(
     @Req() req: Request,
-    @Headers('x-app-key') appKeyHeader: string | undefined,
+    @Headers('x-app-slug') appSlugHeader: string | undefined,
     @Headers('x-user-id') endUserId: string | undefined,
     @Headers('x-api-key') endUserApiKey: string | undefined,
     @UploadedFile(new ParseFilePipe({ fileIsRequired: false, validators: [new MaxFileSizeValidator({ maxSize: 25 * 1024 * 1024 })] }))
     file: Express.Multer.File | undefined,
     @Body() body: OnblurMultipartFieldsDto,
   ): Promise<{ outputUrl: string; routedType: string }> {
-    const app = await this.appGate.findAppByApplicationApiKeyOrThrow(appKeyHeader?.trim());
+    const app = await this.appGate.findAppByApplicationSlugOrThrow(appSlugHeader?.trim());
     const image = await this.appGate.resolveColorizeImageString(file, body);
     const creditAmount = body.strength === 'strong' ? 3 : 1;
     return this.appGate.withUpscalePublicCredits(

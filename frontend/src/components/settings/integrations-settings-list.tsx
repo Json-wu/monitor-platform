@@ -77,7 +77,7 @@ const HELP: Record<IntegrationChannelId, { title: string; body: ReactNode }> = {
             URL；本地联调需 ngrok 等公网入口。
           </p>
           <p>
-            官网创建代收：POST Monitor 公开接口，Header 带 <span className="font-mono text-foreground">X-App-Key</span>，Query{" "}
+            官网创建代收：POST Monitor 公开接口，Header 带 <span className="font-mono text-foreground">X-App-Slug</span>，Query{" "}
             <span className="font-mono text-foreground">slug</span>；密钥不落浏览器。
           </p>
           <p>禁用后，所有应用的代收下单将返回服务不可用。</p>
@@ -149,7 +149,7 @@ const HELP: Record<IntegrationChannelId, { title: string; body: ReactNode }> = {
           </p>
           <p>
             对外调用：Query <span className="font-mono text-foreground">slug</span> + Header{" "}
-            <span className="font-mono text-foreground">X-App-Key</span>；可选{" "}
+            <span className="font-mono text-foreground">X-App-Slug</span>；可选{" "}
             <span className="font-mono text-foreground">X-User-Id</span>（终端用户 UUID，与抠图相同）：识别用户则每次生图扣 1
             积分，失败退回；未带时与抠图<strong className="text-foreground">共用</strong>匿名日限表（每应用、每 IP、每 UTC 日共 1 次免费）。POST{" "}
             <span className="font-mono text-foreground">/api/public/image-generation/generate</span> 或{" "}
@@ -187,7 +187,7 @@ const HELP: Record<IntegrationChannelId, { title: string; body: ReactNode }> = {
             也可通过 <span className="font-mono text-foreground">type</span> 参数指定 <span className="font-mono text-foreground">face / general / anime</span> 直接路由。
           </p>
           <p>
-            对外调用：Header <span className="font-mono text-foreground">X-App-Key</span> 必填；
+            对外调用：Header <span className="font-mono text-foreground">X-App-Slug</span> 必填；
             可选 <span className="font-mono text-foreground">X-User-Id</span> / <span className="font-mono text-foreground">X-Api-Key</span>：
             识别到终端用户：strength=standard 每次扣 1 分，strength=strong 每次扣 3 分，失败按实际扣分退回；未识别时同一 IP 每 UTC 日共 1 次免费。
           </p>

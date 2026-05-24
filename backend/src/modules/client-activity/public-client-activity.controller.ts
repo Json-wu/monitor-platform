@@ -20,6 +20,7 @@ import {
 import type { Request } from 'express';
 import {
   PublicClientActivityIngestResponseDto,
+  SITE_APP_SLUG_HEADER_DESC,
   SITE_SLUG_QUERY_DESC,
 } from '../../common/swagger/public-site-api.dto';
 import { Public } from '../../common/decorators/public.decorator';
@@ -38,14 +39,13 @@ export class PublicClientActivityController {
   @Post('client-activity')
   @ApiOperation({
     summary: '上报客户端行为事件',
-    description: 'Query `slug` + Header `X-App-Key` 鉴权，body 为事件批次。',
+    description: 'Query `slug` + Header `X-App-Slug` 鉴权，body 为事件批次。',
   })
   @ApiQuery({ name: 'slug', required: true, description: SITE_SLUG_QUERY_DESC })
   @ApiHeader({
-    name: 'x-app-key',
+    name: 'x-app-slug',
     required: true,
-    description:
-      '应用 API Key（**Application.apiKey**），须与 slug 对应应用一致',
+    description: SITE_APP_SLUG_HEADER_DESC,
   })
   @ApiBody({ type: IngestClientActivityDto })
   @ApiOkResponse({
@@ -55,18 +55,18 @@ export class PublicClientActivityController {
   @ApiBadRequestResponse({
     description: 'slug 缺失、events 为空等',
   })
-  @ApiUnauthorizedResponse({ description: 'X-App-Key 与 slug 不匹配' })
+  @ApiUnauthorizedResponse({ description: 'X-App-Slug 与 query slug 不匹配' })
   @Public()
   async ingest(
     @Query('slug') slug: string | undefined,
-    @Headers('x-app-key') apiKey: string | undefined,
+    @Headers('x-app-slug') appSlug: string | undefined,
     @Body() body: IngestClientActivityDto,
     @Req() req: Request,
   ) {
+    const app = await this.removeBgHelper.findAppByApplicationSlugOrThrow(appSlug);
     const s = slug?.trim();
     if (!s) throw new BadRequestException('Query slug is required');
-    const app = await this.removeBgHelper.findAppBySlugOrThrow(s);
-    this.removeBgHelper.assertAppKey(app, apiKey);
+    this.removeBgHelper.assertAppSlug(app, s);
     if (!body?.events?.length) {
       throw new BadRequestException('events array is required');
     }

@@ -367,7 +367,7 @@ export function UpscaleSettingsPanel({
       {/* ── 公开接口说明 ── */}
       <SectionCard
         title="公开接口（应用鉴权 + 积分）"
-        tips="Header X-App-Key（应用 API Key）必填。可选 X-User-Id 或 X-Api-Key：识别到用户时 colorize 每次扣 1 分，unblur 为 standard 扣 1 分/次、strong 扣 3 分/次，inpainting 每次扣 1 分，pro-headshot 按 outputs=1/2/4 扣同等积分；失败按实际扣分退回。未识别时与其它公开消费级接口相同规则：同一应用、同一 IP 每 UTC 日共 1 次免费。"
+        tips="Header X-App-Slug（应用 slug）必填。可选 X-User-Id 或 X-Api-Key：识别到用户时 colorize 每次扣 1 分，unblur 为 standard 扣 1 分/次、strong 扣 3 分/次，inpainting 每次扣 1 分，pro-headshot 按 outputs=1/2/4 扣同等积分；失败按实际扣分退回。未识别时与其它公开消费级接口相同规则：同一应用、同一 IP 每 UTC 日共 1 次免费。"
       >
         <div className="space-y-3 text-sm">
           <div className="flex items-start gap-2 rounded-lg bg-muted/40 px-3 py-2 font-mono text-xs break-all">

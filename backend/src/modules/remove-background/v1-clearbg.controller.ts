@@ -27,7 +27,7 @@ import { RemoveBackgroundService } from './remove-background.service';
 
 /**
  * 公开抠图代理 v1：POST /api/v1/clearbg
- * 必填 Header：`X-App-Key`（值为 Application.apiKey；旧客户端可仍传 `X-App-Id`，效果相同）。
+ * 必填 Header：`X-App-Slug`（值为 Application.slug）。
  * 可选：`X-Api-Key`（终端用户 API Key）或 `X-User-Id`（终端用户 UUID，站内代理可用）；否则走匿名日限额。
  */
 @ApiTags('抠图 API（公开）')
@@ -40,13 +40,13 @@ export class V1ClearbgController {
   @ApiOperation({
     summary: '去除背景（multipart）',
     description:
-      '单一表单字段 `image`：可为 multipart 二进制文件，或**文本**（自动识别：以 `http://`/`https://` 开头则按公网 URL 拉取，否则按 base64 / `data:image/...;base64,...` 解码；≤25MB）。必填 `X-App-Key`。可选 `X-Api-Key` 扣积分；否则匿名日限额。',
+      '单一表单字段 `image`：可为 multipart 二进制文件，或**文本**（自动识别：以 `http://`/`https://` 开头则按公网 URL 拉取，否则按 base64 / `data:image/...;base64,...` 解码；≤25MB）。必填 `X-App-Slug`。可选 `X-Api-Key` 扣积分；否则匿名日限额。',
   })
   @ApiConsumes('multipart/form-data')
   @ApiHeader({
-    name: 'X-App-Key',
+    name: 'X-App-Slug',
     required: true,
-    description: '应用 API Key（Monitor 应用详情 / Application.apiKey）',
+    description: '应用 slug（Monitor 应用详情 / Application.slug）',
   })
   @ApiHeader({
     name: 'X-Api-Key',
@@ -84,7 +84,7 @@ export class V1ClearbgController {
   async clearbg(
     @Req() req: Request,
     @Headers('x-user-id') endUserId: string | undefined,
-    @Headers('x-app-key') appKeyHeader: string | undefined,
+    @Headers('x-app-slug') appSlugHeader: string | undefined,
     @Headers('x-api-key') apiKey: string | undefined,
     @UploadedFile(
       new ParseFilePipe({
@@ -95,9 +95,9 @@ export class V1ClearbgController {
     file: Express.Multer.File | undefined,
     @Body() body: V1ClearbgMultipartFieldsDto,
   ): Promise<StreamableFile> {
-    const applicationApiKey =appKeyHeader?.trim();
-    const app =
-      await this.removeBg.findAppByApplicationApiKeyOrThrow(applicationApiKey);
+    const app = await this.removeBg.findAppByApplicationSlugOrThrow(
+      appSlugHeader?.trim(),
+    );
     const image = await this.removeBg.resolveClearbgImagePayload(file, body);
     const { buffer, contentType } = await this.removeBg.proxyClearbgPublic(
       req,

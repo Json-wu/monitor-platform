@@ -10,7 +10,7 @@ export function setupSwagger(app: INestApplication): void {
   const config = new DocumentBuilder()
     .setTitle('Monitor API')
     .setDescription(
-      'Monitor 管理后台与终端用户/公开接口。管理员路由需在 Header 携带 `Authorization: Bearer <token>`（登录见 `POST /api/auth/login`）。部分路由另需 `X-App-Key` 等，见各接口说明。\n\n' +
+      'Monitor 管理后台与终端用户/公开接口。管理员路由需在 Header 携带 `Authorization: Bearer <token>`（登录见 `POST /api/auth/login`）。部分路由另需 `X-App-Slug` 等，见各接口说明。\n\n' +
         '**文档约定**：已标注 `@ApiOkResponse` 的接口会展示 **响应 Schema** 与 **Examples**（含枚举中文含义）；其余接口将逐步补齐。',
     )
     .setVersion('1.0')
@@ -26,11 +26,11 @@ export function setupSwagger(app: INestApplication): void {
     .addApiKey(
       {
         type: 'apiKey',
-        name: 'X-App-Key',
+        name: 'X-App-Slug',
         in: 'header',
-        description: '应用密钥（部分管理/代理接口）',
+        description: '应用 slug（部分公开/代理接口，与 Application.slug 一致）',
       },
-      'X-App-Key',
+      'X-App-Slug',
     )
     .addApiKey(
       {

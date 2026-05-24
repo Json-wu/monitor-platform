@@ -403,7 +403,7 @@ export class PublicEndUserAuthService {
 
   /**
    * 终端用户会话展示：昵称、头像、积分合计、套餐名（无套餐时为「免费计划」）。
-   * 含 `appKey`（所属 Application.apiKey，供 X-App-Key / 文档示例；未配置时为 null）。
+   * 含 `appSlug`（所属 Application.slug，供请求头 `X-App-Slug` / 文档示例）。
    */
   private async buildPublicEndUserProfile(userId: string) {
     const user = await this.prisma.endUser.findUnique({
@@ -416,7 +416,7 @@ export class PublicEndUserAuthService {
         passwordHash: true,
         apiKey: true,
         createdAt: true,
-        app: { select: { apiKey: true } },
+        app: { select: { slug: true } },
         creditAccount: {
           select: {
             balanceSub: true,
@@ -483,7 +483,7 @@ export class PublicEndUserAuthService {
       email: user.email,
       name: user.name,
       avatarUrl: user.avatarUrl,
-      appKey: user.app.apiKey ?? null,
+      appSlug: user.app.slug,
       accountCreatedAt: user.createdAt.toISOString(),
       credits,
       creditsSub: sub,

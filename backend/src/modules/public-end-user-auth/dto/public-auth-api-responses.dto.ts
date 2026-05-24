@@ -98,12 +98,10 @@ export class PublicEndUserProfileDto {
   avatarUrl: string | null;
 
   @ApiProperty({
-    nullable: true,
-    description:
-      '所属应用的公开 API Key，与请求头 `X-App-Key` 相同；后台未配置应用 Key 时为 null',
-    example: 'cbg_xxxxxxxx',
+    description: '所属应用 slug，与请求头 `X-App-Slug` 一致',
+    example: 'colorizerai',
   })
-  appKey: string | null;
+  appSlug: string;
 
   @ApiProperty({ description: '账户创建时间 ISO 8601' })
   accountCreatedAt: string;
