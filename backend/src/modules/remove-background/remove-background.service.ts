@@ -1,6 +1,7 @@
 import {
   BadGatewayException,
   BadRequestException,
+  ForbiddenException,
   HttpException,
   HttpStatus,
   Injectable,
@@ -656,6 +657,118 @@ export class RemoveBackgroundService {
       return await operation();
     } catch (e) {
       if (reserved) {
+        await this.prisma.clearbgAnonymousDailyUsage
+          .deleteMany({ where: { appId: app.id, ip, dayUtc } })
+          .catch(() => undefined);
+      }
+      throw e;
+    }
+  }
+
+  /**
+   * 上色流水线：基础 1 分 + 可选划痕修复 1 分 + 可选人脸高清 2 分（各步骤成功后再扣附加分）。
+   * 匿名用户仅允许基础上色；附加选项须登录且余额充足。
+   */
+  async withColorizePipelinePublicCredits(
+    req: Request,
+    app: Application,
+    opts: { apiKey?: string; userId?: string },
+    flags: { cleanScratches: boolean; faceRemaster: boolean },
+    steps: {
+      colorize: () => Promise<{ outputUrl: string }>;
+      scratchRepair: (imageUrl: string) => Promise<{ outputUrl: string }>;
+      faceRemaster: (imageUrl: string) => Promise<{ outputUrl: string }>;
+    },
+  ): Promise<{ outputUrl: string }> {
+    const registered = await this.resolveRegisteredEndUser(app.id, opts);
+    if (!registered && (flags.cleanScratches || flags.faceRemaster)) {
+      throw new ForbiddenException(
+        'Add-on options require a signed-in account with sufficient credits.',
+      );
+    }
+
+    let anonymousReserved = false;
+    const ip = getClientIp(req);
+    const dayUtc = this.utcDateOnly();
+
+    if (!registered) {
+      try {
+        await this.prisma.clearbgAnonymousDailyUsage.create({
+          data: { appId: app.id, ip, dayUtc },
+        });
+        anonymousReserved = true;
+      } catch (e) {
+        if (this.isUniqueViolation(e)) {
+          throw new HttpException(
+            'Daily free limit reached for your network. Please sign in with your API key to continue or try again tomorrow.',
+            HttpStatus.TOO_MANY_REQUESTS,
+          );
+        }
+        throw e;
+      }
+    }
+
+    let colorizeDebit: CreditType | undefined;
+    try {
+      if (registered) {
+        colorizeDebit = await this.credit.deductForDdcolorApi(
+          registered.id,
+          app.id,
+        );
+      }
+      let outputUrl = (await steps.colorize()).outputUrl;
+
+      if (flags.cleanScratches) {
+        let scratchDebit: CreditType | undefined;
+        try {
+          scratchDebit = await this.credit.deductForColorizeScratchRepair(
+            registered!.id,
+            app.id,
+          );
+          outputUrl = (await steps.scratchRepair(outputUrl)).outputUrl;
+        } catch (e) {
+          if (scratchDebit !== undefined) {
+            await this.credit
+              .refundColorizeScratchRepairFailure(
+                registered!.id,
+                app.id,
+                scratchDebit,
+              )
+              .catch(() => undefined);
+          }
+          throw e;
+        }
+      }
+
+      if (flags.faceRemaster) {
+        let remasterDebit:
+          | Array<{ creditType: CreditType; amount: number }>
+          | undefined;
+        try {
+          remasterDebit = await this.credit.deductForUpscaleApi(
+            registered!.id,
+            app.id,
+            2,
+          );
+          outputUrl = (await steps.faceRemaster(outputUrl)).outputUrl;
+        } catch (e) {
+          if (remasterDebit !== undefined && remasterDebit.length > 0) {
+            await this.credit
+              .refundUpscaleApiFailure(registered!.id, app.id, remasterDebit)
+              .catch(() => undefined);
+          }
+          throw e;
+        }
+      }
+
+      return { outputUrl };
+    } catch (e) {
+      if (registered && colorizeDebit !== undefined) {
+        await this.credit
+          .refundDdcolorApiFailure(registered.id, app.id, colorizeDebit)
+          .catch(() => undefined);
+      }
+      if (anonymousReserved) {
         await this.prisma.clearbgAnonymousDailyUsage
           .deleteMany({ where: { appId: app.id, ip, dayUtc } })
           .catch(() => undefined);

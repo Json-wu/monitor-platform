@@ -367,7 +367,7 @@ export function UpscaleSettingsPanel({
       {/* ── 公开接口说明 ── */}
       <SectionCard
         title="公开接口（应用鉴权 + 积分）"
-        tips="Header X-App-Slug（应用 slug）必填。可选 X-User-Id 或 X-Api-Key：识别到用户时 colorize 每次扣 1 分，unblur 为 standard 扣 1 分/次、strong 扣 3 分/次，inpainting 每次扣 1 分，pro-headshot 按 outputs=1/2/4 扣同等积分；失败按实际扣分退回。未识别时与其它公开消费级接口相同规则：同一应用、同一 IP 每 UTC 日共 1 次免费。"
+        tips="Header X-App-Slug（应用 slug）必填。可选 X-User-Id 或 X-Api-Key：识别到用户时 colorize 基础上色扣 1 分；clean_scratches 成功后另扣 1 分；face_remaster 成功后另扣 2 分；unblur 为 standard 扣 1 分/次、strong 扣 3 分/次，inpainting 每次扣 1 分，pro-headshot 按 outputs=1/2/4 扣同等积分；失败按实际扣分退回。匿名仅免费基础上色。未识别时与其它公开消费级接口相同规则：同一应用、同一 IP 每 UTC 日共 1 次免费。"
       >
         <div className="space-y-3 text-sm">
           <div className="flex items-start gap-2 rounded-lg bg-muted/40 px-3 py-2 font-mono text-xs break-all">
@@ -393,6 +393,14 @@ export function UpscaleSettingsPanel({
             <div>
               <span className="font-mono text-foreground">model</span>
               <span className="text-muted-foreground ml-2">可选 — large / tiny（覆盖 DDColor 默认 model_size）</span>
+            </div>
+            <div>
+              <span className="font-mono text-foreground">clean_scratches</span>
+              <span className="text-muted-foreground ml-2">可选 — true/false，上色成功后划痕修复（+1 积分）</span>
+            </div>
+            <div>
+              <span className="font-mono text-foreground">face_remaster</span>
+              <span className="text-muted-foreground ml-2">可选 — true/false，人脸模糊转高清 CodeFormer（+2 积分）</span>
             </div>
           </div>
           <div className="flex items-start gap-2 rounded-lg bg-muted/40 px-3 py-2 font-mono text-xs break-all">

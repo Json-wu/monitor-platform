@@ -63,4 +63,12 @@ export class PatchReplicateSettingsDto {
   @IsOptional()
   @IsEnum(['large', 'tiny'] as const)
   ddcolorDefaultModelSize?: 'large' | 'tiny';
+
+  @ApiPropertyOptional({
+    default: 'topazlabs/dust-and-scratch-v2',
+    description: '上色附加「划痕修复」使用的 Replicate 模型引用',
+  })
+  @IsOptional()
+  @IsString()
+  scratchRepairRef?: string;
 }

@@ -15,6 +15,10 @@ export const CreditReasonCode = {
   DdcolorApiDeduct: 'ddcolor.api.deduct',
   /** DDColor 上色上游失败后退回 1 分 */
   DdcolorApiRefund: 'ddcolor.api.refund',
+  /** 上色流程可选：划痕修复成功后扣 1 分 */
+  ColorizeScratchRepairDeduct: 'colorize.scratch_repair.deduct',
+  /** 上色流程划痕修复失败后退回 1 分 */
+  ColorizeScratchRepairRefund: 'colorize.scratch_repair.refund',
   /** 公开图片超分去模糊 API 调用前扣 1 分 */
   UpscaleApiDeduct: 'upscale.api.deduct',
   /** 图片超分上游失败后退回 1 分 */

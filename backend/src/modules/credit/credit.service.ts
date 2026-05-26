@@ -495,6 +495,132 @@ export class CreditService {
     ]);
   }
 
+  /** 上色流程可选划痕修复：成功前扣 1 分 */
+  async deductForColorizeScratchRepair(
+    userId: string,
+    appId: string,
+  ): Promise<CreditType> {
+    return this.deductSingleCredit(
+      userId,
+      appId,
+      CreditReasonCode.ColorizeScratchRepairDeduct,
+    );
+  }
+
+  async refundColorizeScratchRepairFailure(
+    userId: string,
+    appId: string,
+    creditType: CreditType,
+  ): Promise<void> {
+    await this.refundSingleCredit(
+      userId,
+      appId,
+      creditType,
+      CreditReasonCode.ColorizeScratchRepairRefund,
+    );
+  }
+
+  private async deductSingleCredit(
+    userId: string,
+    appId: string,
+    reason: string,
+  ): Promise<CreditType> {
+    const amount = 1;
+    const account = await this.getAccount(userId, appId);
+    const totalBalance =
+      account.balanceSub + account.balancePayg + account.balancePromo;
+    if (totalBalance < amount) {
+      throw new ForbiddenException(
+        'Insufficient credits. Please purchase more credits or upgrade your plan.',
+      );
+    }
+
+    let remaining = amount;
+    const updates: Prisma.CreditAccountUpdateInput = {
+      totalSpent: { increment: amount },
+    };
+    let debitedCreditType: CreditType = 'payg';
+    if (remaining > 0 && account.balancePromo > 0) {
+      const n = Math.min(remaining, account.balancePromo);
+      updates.balancePromo = { decrement: n };
+      remaining -= n;
+      debitedCreditType = 'promo';
+    } else if (remaining > 0 && account.balanceSub > 0) {
+      const n = Math.min(remaining, account.balanceSub);
+      updates.balanceSub = { decrement: n };
+      remaining -= n;
+      debitedCreditType = 'subscription';
+    } else if (remaining > 0 && account.balancePayg > 0) {
+      const n = Math.min(remaining, account.balancePayg);
+      updates.balancePayg = { decrement: n };
+      remaining -= n;
+      debitedCreditType = 'payg';
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.creditAccount.update({
+        where: { id: account.id },
+        data: updates,
+      }),
+      this.prisma.creditTransaction.create({
+        data: {
+          accountId: account.id,
+          appId,
+          type: 'deduct',
+          creditType: debitedCreditType,
+          amount: -amount,
+          balanceAfter: totalBalance - amount,
+          reason,
+          operatorId: null,
+        },
+      }),
+    ]);
+    return debitedCreditType;
+  }
+
+  private async refundSingleCredit(
+    userId: string,
+    appId: string,
+    creditType: CreditType,
+    reason: string,
+  ): Promise<void> {
+    const account = await this.prisma.creditAccount.findUnique({
+      where: { userId_appId: { userId, appId } },
+    });
+    if (!account) return;
+
+    const balanceField =
+      creditType === 'promo'
+        ? 'balancePromo'
+        : creditType === 'subscription'
+          ? 'balanceSub'
+          : 'balancePayg';
+    const totalAfter =
+      account.balanceSub + account.balancePayg + account.balancePromo + 1;
+
+    await this.prisma.$transaction([
+      this.prisma.creditAccount.update({
+        where: { id: account.id },
+        data: {
+          [balanceField]: { increment: 1 },
+          totalSpent: { decrement: 1 },
+        },
+      }),
+      this.prisma.creditTransaction.create({
+        data: {
+          accountId: account.id,
+          appId,
+          type: 'refund',
+          creditType,
+          amount: 1,
+          balanceAfter: totalAfter,
+          reason,
+          operatorId: null,
+        },
+      }),
+    ]);
+  }
+
   /**
    * 公开超分去模糊 API：调用前扣分（默认 1；strength=strong 等为 3）。
    * 按 promo → subscription → payg 顺序跨池扣满 amount；失败时把返回的 breakdown 交给 refundUpscaleApiFailure。

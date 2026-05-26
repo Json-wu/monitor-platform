@@ -27,6 +27,7 @@ export const DEFAULT_LAMA_INPAINT_REF = 'zylim0702/remove-object';
 export const DEFAULT_PRO_HEADSHOT_REF = 'flux-kontext-apps/professional-headshot';
 export const DEFAULT_DDCOLOR_VERSION =
   'ca494ba129e44e45f661d6ece83c4c98a9a7c774309beca01429b58fce8aa695';
+export const DEFAULT_SCRATCH_REPAIR_REF = 'topazlabs/dust-and-scratch-v2';
 
 export interface UpscaleResult {
   outputUrl: string;
@@ -96,6 +97,9 @@ export class ReplicateService {
       if (dto.ddcolorDefaultModelSize !== undefined) {
         next.ddcolorDefaultModelSize = dto.ddcolorDefaultModelSize;
       }
+      if (dto.scratchRepairRef !== undefined) {
+        next.scratchRepairRef = dto.scratchRepairRef.trim();
+      }
       return next;
     });
   }
@@ -111,6 +115,7 @@ export class ReplicateService {
     ddcolorVersion: string;
     ddcolorVersionIsDefault: boolean;
     ddcolorDefaultModelSize: 'large' | 'tiny';
+    scratchRepairRef: string;
     blipRef: string;
     defaultType: UpscaleImageType;
   }> {
@@ -147,6 +152,10 @@ export class ReplicateService {
       ddcolorVersion,
       ddcolorVersionIsDefault: !/^([a-f0-9]{64})$/i.test(ddVerRaw),
       ddcolorDefaultModelSize,
+      scratchRepairRef:
+        typeof c.scratchRepairRef === 'string' && c.scratchRepairRef.trim()
+          ? c.scratchRepairRef.trim()
+          : DEFAULT_SCRATCH_REPAIR_REF,
       blipRef:
         typeof c.blipRef === 'string' && c.blipRef.trim()
           ? c.blipRef.trim()
@@ -557,6 +566,46 @@ export class ReplicateService {
     const outputUrl = this.normalizeReplicateImageUrl(output);
     if (!outputUrl?.trim()) {
       throw new BadGatewayException('Replicate 返回结果中无有效 output URL');
+    }
+    return { outputUrl: outputUrl.trim() };
+  }
+
+  /** 自动检测并修复老照片划痕/污渍（Topaz Dust and Scratch 或后台配置的模型） */
+  async cleanScratches(dto: { image: string }): Promise<{ outputUrl: string }> {
+    const s = await this.getSettingsForAdmin();
+    if (!s.enabled) {
+      throw new ServiceUnavailableException(
+        'Replicate 集成未启用（请在集成设置中开启并配置 Token）',
+      );
+    }
+    if (!s.apiTokenSet) {
+      throw new ServiceUnavailableException('Replicate API Token 未配置');
+    }
+    const c = await this.getConfigRow();
+    const token = String(c.apiToken ?? '').trim();
+    const image = dto.image?.trim();
+    if (!image) {
+      throw new BadRequestException('缺少 image');
+    }
+    const ref = s.scratchRepairRef;
+    const resolvedRef = await this.resolveRef(ref, token);
+    const replicate = new Replicate({ auth: token, useFileOutput: false });
+    let output: unknown;
+    try {
+      output = await replicate.run(
+        resolvedRef as `${string}/${string}` | `${string}/${string}:${string}`,
+        {
+          input: { image },
+          wait: { mode: 'poll', interval: 2000 },
+        },
+      );
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new BadGatewayException(`划痕修复调用失败: ${msg}`);
+    }
+    const outputUrl = this.normalizeReplicateImageUrl(output);
+    if (!outputUrl?.trim()) {
+      throw new BadGatewayException('划痕修复模型未返回有效 output URL');
     }
     return { outputUrl: outputUrl.trim() };
   }
