@@ -28,7 +28,10 @@ RUN if command -v apk >/dev/null 2>&1; then \
       && adduser --system --uid 1001 --ingroup nodejs nestjs; \
     else \
       groupadd --system --gid 1001 nodejs \
-      && useradd --system --uid 1001 --gid nodejs nestjs; \
+      && useradd --system --uid 1001 --gid nodejs nestjs \
+      && apt-get update -y \
+      && apt-get install -y --no-install-recommends openssl ca-certificates \
+      && rm -rf /var/lib/apt/lists/*; \
     fi
 COPY package.json package-lock.json* ./
 COPY scripts/docker-npm-ci.sh ./scripts/docker-npm-ci.sh

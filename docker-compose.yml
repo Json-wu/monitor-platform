@@ -9,12 +9,12 @@
 #
 # 国内若无法访问 Docker Hub，默认使用阿里云 ACR 个人镜像（需先 docker login）：
 #   docker login crpi-g5p50ww96ven4gi1.cn-shanghai.personal.cr.aliyuncs.com
-# 可覆盖：NODE_IMAGE=node:20-alpine POSTGRES_IMAGE=postgres:15-alpine
+# 可覆盖：NODE_IMAGE=node:20-alpine POSTGRES_IMAGE=postgres:16-alpine
 name: monitor-platform
 
 services:
   postgres:
-    image: ${POSTGRES_IMAGE:-docker.m.daocloud.io/library/postgres:15-alpine}
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres

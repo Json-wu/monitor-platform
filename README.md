@@ -57,7 +57,7 @@ monitor-platform/
 ### 环境要求
 
 - **Node.js** ≥ 20  
-- **PostgreSQL** ≥ 15（或与 Prisma 配置兼容的版本）  
+- **PostgreSQL** ≥ 16（与生产 `postgres:16-alpine` 一致；或与 Prisma 配置兼容的版本）  
 - 根目录分别在 `frontend/`、`backend/` 下安装依赖并配置环境变量。
 
 ### 数据库与 Prisma

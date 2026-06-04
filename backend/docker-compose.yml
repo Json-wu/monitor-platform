@@ -1,7 +1,7 @@
 # 本地开发：仅 PostgreSQL。若需 Postgres + 后端 + 前端一并 Docker 启动，请用仓库根目录 docker-compose.yml
 services:
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: monitor-postgres
     environment:
       POSTGRES_USER: postgres
