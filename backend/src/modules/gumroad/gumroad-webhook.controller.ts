@@ -1,5 +1,6 @@
 import { Body, Controller, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
+import type { RequestWithRawBody } from '../../common/utils/raw-body.util';
 import { getClientIp } from '../../common/utils/request.util';
 import {
   ApiOkResponse,
@@ -30,17 +31,24 @@ export class GumroadWebhookController {
   @ApiOperation({
     summary: 'Gumroad Ping（产品销售/退款通知）',
     description:
-      '请求体由 Gumroad 发送，application/x-www-form-urlencoded。校验 seller_id 后按邮箱与方案 payment_link 自动发放积分；幂等以 sale_id 作为订单编号。',
+      '请求体由 Gumroad 发送，application/x-www-form-urlencoded。校验 seller_id 后按邮箱与方案 payment_link 自动发放积分；幂等以 sale_id 作为订单编号。' +
+      ' industry-ai-news-pro / unlimited 会原样中继至 Supabase gumroad-webhook，并在应用 chrome-ainews 下按邮箱建用户与订单。',
   })
   @ApiOkResponse({
     description: '成功受理',
     schema: { type: 'object', properties: { ack: { type: 'string', example: 'ok' } } },
   })
   @ApiUnauthorizedResponse({ description: 'seller_id 不匹配' })
-  async ping(@Body() body: Record<string, unknown>, @Req() req: Request) {
+  async ping(
+    @Body() body: Record<string, unknown>,
+    @Req() req: Request & RequestWithRawBody,
+  ) {
+    const contentType = req.headers['content-type'];
     return this.gumroad.handlePing(body, {
       ipAddress: getClientIp(req),
       userAgent: req.headers['user-agent'],
+      rawBody: req.rawBody,
+      contentType: typeof contentType === 'string' ? contentType : undefined,
     });
   }
 }

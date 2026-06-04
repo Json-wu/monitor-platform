@@ -7,6 +7,10 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { PrismaService } from './prisma/prisma.service';
 import { setupSwagger } from './swagger';
 import { json, urlencoded } from 'express';
+import {
+  isGumroadWebhookPath,
+  type RequestWithRawBody,
+} from './common/utils/raw-body.util';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -15,7 +19,17 @@ async function bootstrap() {
 
   // Allow large base64 JSON payloads for public image generation APIs.
   app.use(json({ limit: '30mb' }));
-  app.use(urlencoded({ extended: true, limit: '30mb' }));
+  app.use(
+    urlencoded({
+      extended: true,
+      limit: '30mb',
+      verify: (req, _res, buf) => {
+        if (isGumroadWebhookPath(req.url)) {
+          (req as RequestWithRawBody).rawBody = buf;
+        }
+      },
+    }),
+  );
 
   /** 合并 CORS_ORIGINS、FRONTEND_URL、ADMIN_ORIGIN，避免只配了 CORS_ORIGINS 时漏掉管理后台来源 */
   function collectCorsOrigins(): string[] {

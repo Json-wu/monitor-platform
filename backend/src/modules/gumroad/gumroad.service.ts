@@ -22,6 +22,15 @@ import { SystemOperationLogService } from '../system-log/system-operation-log.se
 export type GumroadWebhookContext = {
   ipAddress?: string;
   userAgent?: string | null;
+  /** Gumroad Ping 原始 body（用于 Supabase 中继，勿 JSON 重组） */
+  rawBody?: Buffer;
+  contentType?: string;
+};
+
+type SupabaseRelayResult = {
+  status: number;
+  body: string;
+  ok: boolean;
 };
 
 /**
@@ -36,6 +45,13 @@ type GumroadPingPayload = {
   short_product_id?: unknown;
   product_name?: unknown;
   email?: unknown;
+  purchaser_email?: unknown;
+  subscription_id?: unknown;
+  subscription_cancelled_at?: unknown;
+  cancelled?: unknown;
+  subscription_ended_at?: unknown;
+  cancelled_at?: unknown;
+  ends_at?: unknown;
   /** 产品 URL 上的自定义查询参数，如 `?user_id=…` → `url_params.user_id` */
   url_params?: unknown;
   /** 产品在 Gumroad 后台配置的自定义字段 */
@@ -66,6 +82,12 @@ function asInt(v: unknown, fallback = 0): number {
     if (Number.isFinite(n)) return Math.trunc(n);
   }
   return fallback;
+}
+
+function isNonEmptyField(v: unknown): boolean {
+  if (v == null) return false;
+  if (typeof v === 'string') return v.trim().length > 0;
+  return true;
 }
 
 function isTruthyFlag(v: unknown): boolean {
@@ -239,7 +261,7 @@ export class GumroadService {
       );
     }
 
-    const email = asString(payload.email).toLowerCase();
+    const email = this.extractBuyerEmail(payload);
     if (!email || !email.includes('@')) {
       this.logger.warn('Gumroad ping missing email');
       await this.recordPingLog(ctx, {
@@ -249,6 +271,10 @@ export class GumroadService {
         metadata: meta(),
       });
       throw new BadRequestException('email is required');
+    }
+
+    if (this.isAinewsRelayProduct(payload)) {
+      return this.handleAinewsRelayPing(payload, email, ctx);
     }
 
     const plan = await this.matchPlan(payload);
@@ -488,5 +514,460 @@ export class GumroadService {
       if (plan) return plan;
     }
     return null;
+  }
+
+  private extractBuyerEmail(payload: GumroadPingPayload): string {
+    const email =
+      asString(payload.email) || asString(payload.purchaser_email);
+    return email.toLowerCase();
+  }
+
+  private ainewsProductNeedles(): string[] {
+    const pro =
+      process.env.GUMROAD_PRODUCT_ID_PRO?.trim() || 'industry-ai-news-pro';
+    const unlimited =
+      process.env.GUMROAD_PRODUCT_ID_UNLIMITED?.trim() ||
+      'industry-ai-news-unlimited';
+    return [pro, unlimited];
+  }
+
+  private isAinewsRelayProduct(payload: GumroadPingPayload): boolean {
+    const needles = this.ainewsProductNeedles().map((n) => n.toLowerCase());
+    const candidates = [
+      asString(payload.product_id),
+      asString(payload.product_permalink),
+      asString(payload.permalink),
+      asString(payload.short_product_id),
+    ].filter((s) => s.length > 0);
+    for (const term of candidates) {
+      const lower = term.toLowerCase();
+      if (needles.some((n) => lower.includes(n))) return true;
+    }
+    return false;
+  }
+
+  private isGumroadCancellation(payload: GumroadPingPayload): boolean {
+    if (isTruthyFlag(payload.refunded)) return true;
+    if (
+      isNonEmptyField(payload.subscription_cancelled_at) ||
+      isTruthyFlag(payload.cancelled)
+    ) {
+      return true;
+    }
+    return (
+      isNonEmptyField(payload.subscription_ended_at) ||
+      isNonEmptyField(payload.cancelled_at) ||
+      isNonEmptyField(payload.ends_at)
+    );
+  }
+
+  private async resolveAinewsApplication() {
+    const slug =
+      process.env.GUMROAD_AINEWS_APP_SLUG?.trim() || 'chrome-ainews';
+    const app = await this.prisma.application.findUnique({
+      where: { slug },
+      select: { id: true, slug: true },
+    });
+    if (!app) {
+      throw new BadRequestException(
+        `Application not found for slug: ${slug}`,
+      );
+    }
+    return app;
+  }
+
+  private async matchPlanForApp(
+    appId: string,
+    payload: GumroadPingPayload,
+  ) {
+    const candidates = [
+      asString(payload.product_permalink),
+      asString(payload.permalink),
+      asString(payload.short_product_id),
+      asString(payload.product_id),
+    ].filter((s) => s.length > 0);
+
+    for (const term of candidates) {
+      const plan = await this.prisma.pricingPlan.findFirst({
+        where: {
+          appId,
+          isActive: true,
+          paymentLink: { contains: term, mode: 'insensitive' },
+        },
+      });
+      if (plan) return plan;
+    }
+    return null;
+  }
+
+  private async findOrCreateEndUserByEmail(appId: string, email: string) {
+    const existing = await this.prisma.endUser.findUnique({
+      where: { appId_email: { appId, email } },
+      select: { id: true, email: true, appId: true },
+    });
+    if (existing && existing.appId === appId) return existing;
+
+    const name = email.split('@')[0] || 'User';
+    return this.prisma.$transaction(async (tx) => {
+      const u = await tx.endUser.create({
+        data: {
+          appId,
+          email,
+          name,
+          emailVerifiedAt: new Date(),
+          status: 'active',
+        },
+        select: { id: true, email: true, appId: true },
+      });
+      await tx.creditAccount.create({
+        data: { userId: u.id, appId },
+      });
+      return u;
+    });
+  }
+
+  private buildRelayRawBody(
+    payload: GumroadPingPayload,
+    ctx?: GumroadWebhookContext,
+  ): Buffer {
+    if (ctx?.rawBody && ctx.rawBody.length > 0) return ctx.rawBody;
+    this.logger.warn(
+      'Gumroad relay: rawBody missing, falling back to urlencoded serialize',
+    );
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(
+      payload as Record<string, unknown>,
+    )) {
+      if (v == null) continue;
+      if (typeof v === 'object') {
+        params.set(k, JSON.stringify(v));
+      } else {
+        params.set(k, asString(v) || String(v));
+      }
+    }
+    return Buffer.from(params.toString(), 'utf8');
+  }
+
+  private async forwardToSupabaseGumroadWebhook(
+    rawBody: Buffer,
+    contentType?: string,
+  ): Promise<SupabaseRelayResult | null> {
+    const url = process.env.SUPABASE_GUMROAD_WEBHOOK_URL?.trim();
+    if (!url) {
+      this.logger.warn(
+        'SUPABASE_GUMROAD_WEBHOOK_URL not set; skipping ainews relay forward',
+      );
+      return null;
+    }
+
+    const anonKey = process.env.SUPABASE_ANON_KEY?.trim();
+    const secret = process.env.GUMROAD_WEBHOOK_SECRET?.trim();
+    const headers: Record<string, string> = {
+      'Content-Type':
+        contentType?.trim() || 'application/x-www-form-urlencoded',
+    };
+    if (anonKey) {
+      headers.apikey = anonKey;
+      headers.Authorization = `Bearer ${anonKey}`;
+    }
+    if (secret) headers['x-gumroad-signature'] = secret;
+
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: new Uint8Array(rawBody),
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Gumroad ainews relay fetch failed: ${msg}`);
+      return { status: 0, body: msg, ok: false };
+    }
+
+    const body = await res.text();
+    let upstreamOk = res.ok;
+    if (res.ok) {
+      try {
+        const parsed = JSON.parse(body) as { ok?: unknown };
+        upstreamOk = parsed.ok === true;
+      } catch {
+        upstreamOk = false;
+      }
+    }
+    return { status: res.status, body, ok: upstreamOk };
+  }
+
+  /**
+   * industry-ai-news-pro / unlimited：原样转发 Supabase Edge，并在 chrome-ainews 下按邮箱建用户、建订单。
+   */
+  private async handleAinewsRelayPing(
+    payload: GumroadPingPayload,
+    email: string,
+    ctx?: GumroadWebhookContext,
+  ): Promise<{ ack: string }> {
+    const saleIdRaw = asString(payload.sale_id) || 'unknown';
+    const meta = () => this.pingMeta(payload);
+    const rawBody = this.buildRelayRawBody(payload, ctx);
+
+    const relay = await this.forwardToSupabaseGumroadWebhook(
+      rawBody,
+      ctx?.contentType,
+    );
+    if (relay) {
+      if (relay.ok) {
+        this.logger.log(
+          `Gumroad ainews relay ok status=${relay.status} sale_id=${saleIdRaw}`,
+        );
+      } else if (relay.status >= 400 && relay.status < 500) {
+        this.logger.warn(
+          `Gumroad ainews relay client error status=${relay.status} body=${relay.body.slice(0, 500)}`,
+        );
+      } else {
+        this.logger.error(
+          `Gumroad ainews relay failed status=${relay.status} body=${relay.body.slice(0, 500)}`,
+        );
+      }
+      await this.recordPingLog(ctx, {
+        action: relay.ok ? 'ainews_relay_ok' : 'ainews_relay_failed',
+        targetId: saleIdRaw,
+        summary: relay.ok
+          ? `AI News Gumroad 已中继至 Supabase (${email})`
+          : `AI News Gumroad 中继失败 HTTP ${relay.status}`,
+        metadata: {
+          ...meta() as object,
+          relayStatus: relay.status,
+          relayBody: relay.body.slice(0, 2000),
+        },
+      });
+    }
+
+    const app = await this.resolveAinewsApplication();
+    const plan = await this.matchPlanForApp(app.id, payload);
+    if (!plan) {
+      this.logger.warn(
+        `Gumroad ainews ping no matching plan app=${app.slug} email=${email}`,
+      );
+      await this.recordPingLog(ctx, {
+        appId: app.id,
+        action: 'webhook_rejected',
+        targetId: saleIdRaw,
+        summary: `AI News Gumroad 拒绝：无匹配定价方案 (${email})`,
+        metadata: meta(),
+      });
+      throw new BadRequestException('No matching pricing plan');
+    }
+
+    if (this.isGumroadCancellation(payload)) {
+      await this.applyAinewsCancellation(app.id, payload, email, ctx);
+      return { ack: 'ok' };
+    }
+
+    if (isTruthyFlag(payload.disputed) || isTruthyFlag(payload.dispute_won)) {
+      this.logger.log(
+        `Gumroad ainews ping skipped (dispute) sale_id=${asString(payload.sale_id)}`,
+      );
+      return { ack: 'ok' };
+    }
+
+    const user = await this.findOrCreateEndUserByEmail(app.id, email);
+    const saleId = asString(payload.sale_id);
+    const orderNo = saleId
+      ? `GUM-${saleId}`
+      : `GUM-${Date.now().toString(36).toUpperCase()}-${Math.random()
+          .toString(36)
+          .slice(2, 8)
+          .toUpperCase()}`;
+
+    const existing = await this.prisma.order.findUnique({ where: { orderNo } });
+    if (existing?.status === 'paid') {
+      await this.recordPingLog(ctx, {
+        appId: app.id,
+        action: 'webhook_duplicate',
+        targetId: orderNo,
+        summary: `AI News Gumroad 重复回调（已支付）${orderNo} · ${email}`,
+        metadata: {
+          ...meta() as object,
+          userId: user.id,
+          planId: plan.id,
+          orderId: existing.id,
+        },
+      });
+      return { ack: 'ok' };
+    }
+
+    const quantity = Math.max(1, asInt(payload.quantity, 1));
+    const grantPayg = plan.billingInterval === BillingInterval.one_time;
+    const creditsTotal = (plan.creditsPerCycle ?? 0) * quantity;
+    const creditType: CreditType = grantPayg
+      ? CreditType.payg
+      : CreditType.subscription;
+    const orderType: OrderType = grantPayg
+      ? OrderType.payg
+      : OrderType.subscription;
+    const priceRaw = asInt(payload.price, 0);
+    const amount = priceRaw > 0 ? priceRaw / 100 : Number(plan.price) * quantity;
+    const currency =
+      asString(payload.currency).toUpperCase() || plan.currency || 'USD';
+    const paidAt = new Date();
+    const gatewaySubId = asString(payload.subscription_id) || undefined;
+
+    await this.prisma.$transaction(async (tx) => {
+      const order = existing
+        ? await tx.order.update({
+            where: { id: existing.id },
+            data: {
+              status: 'paid',
+              paidAt,
+              gatewayPayload: payload as unknown as Prisma.InputJsonValue,
+              creditsGranted: creditsTotal,
+              gatewayOrderId: asString(payload.order_number) || undefined,
+            },
+          })
+        : await tx.order.create({
+            data: {
+              appId: app.id,
+              userId: user.id,
+              orderNo,
+              type: orderType,
+              status: 'paid',
+              amount: new Prisma.Decimal(amount.toFixed(2)),
+              currency,
+              planId: plan.id,
+              creditsGranted: creditsTotal,
+              gateway: 'gumroad',
+              gatewayOrderId: asString(payload.order_number) || undefined,
+              gatewayPayload: payload as unknown as Prisma.InputJsonValue,
+              paidAt,
+            },
+          });
+
+      if (!grantPayg) {
+        const periodEnd = firstSubscriptionMonthlyExpireUtc(paidAt);
+        await tx.subscription.upsert({
+          where: { appId_userId: { appId: app.id, userId: user.id } },
+          create: {
+            appId: app.id,
+            userId: user.id,
+            planId: plan.id,
+            status: 'active',
+            gatewaySubId,
+            currentPeriodStart: paidAt,
+            currentPeriodEnd: periodEnd,
+          },
+          update: {
+            planId: plan.id,
+            status: 'active',
+            gatewaySubId: gatewaySubId ?? undefined,
+            currentPeriodStart: paidAt,
+            currentPeriodEnd: periodEnd,
+          },
+        });
+      }
+
+      if (creditsTotal <= 0) return;
+
+      let account = await tx.creditAccount.findUnique({
+        where: { userId_appId: { userId: user.id, appId: app.id } },
+      });
+      if (!account) {
+        account = await tx.creditAccount.create({
+          data: { userId: user.id, appId: app.id },
+        });
+      }
+      const balanceField = grantPayg ? 'balancePayg' : 'balanceSub';
+      const prevBucket = grantPayg ? account.balancePayg : account.balanceSub;
+      const newBucket = prevBucket + creditsTotal;
+
+      await tx.creditAccount.update({
+        where: { id: account.id },
+        data: {
+          [balanceField]: { increment: creditsTotal },
+          totalEarned: { increment: creditsTotal },
+        },
+      });
+      await tx.creditTransaction.create({
+        data: {
+          accountId: account.id,
+          appId: app.id,
+          type: 'grant',
+          creditType,
+          amount: creditsTotal,
+          balanceAfter: newBucket,
+          reason: grantPayg
+            ? 'Gumroad pay-as-you-go purchase (AI News)'
+            : 'Gumroad subscription purchase (AI News)',
+          referenceId: order.id,
+        },
+      });
+    });
+
+    const actionLabel = isTruthyFlag(payload.test)
+      ? 'webhook_test_paid'
+      : 'webhook_paid';
+    await this.recordPingLog(ctx, {
+      appId: app.id,
+      action: actionLabel,
+      targetId: orderNo,
+      summary: `AI News Gumroad 支付成功：${orderNo} · ${email} · +${creditsTotal} credits`,
+      metadata: {
+        ...meta() as object,
+        userId: user.id,
+        planId: plan.id,
+        planName: plan.name,
+        creditsGranted: creditsTotal,
+        relayOk: relay?.ok ?? null,
+      },
+    });
+
+    return { ack: 'ok' };
+  }
+
+  private async applyAinewsCancellation(
+    appId: string,
+    payload: GumroadPingPayload,
+    email: string,
+    ctx?: GumroadWebhookContext,
+  ): Promise<void> {
+    const saleId = asString(payload.sale_id);
+    const orderNo = saleId ? `GUM-${saleId}` : null;
+    const now = new Date();
+    const orderStatus = isTruthyFlag(payload.refunded)
+      ? ('refunded' as const)
+      : ('cancelled' as const);
+
+    const user = await this.prisma.endUser.findUnique({
+      where: { appId_email: { appId, email } },
+      select: { id: true },
+    });
+
+    if (orderNo) {
+      const order = await this.prisma.order.findUnique({ where: { orderNo } });
+      if (order && order.appId === appId) {
+        await this.prisma.order.update({
+          where: { id: order.id },
+          data: {
+            status: orderStatus,
+            refundedAt: orderStatus === 'refunded' ? now : undefined,
+            gatewayPayload: payload as unknown as Prisma.InputJsonValue,
+          },
+        });
+      }
+    }
+
+    if (user) {
+      await this.prisma.subscription.updateMany({
+        where: { appId, userId: user.id, status: 'active' },
+        data: { status: 'cancelled', cancelAt: now },
+      });
+    }
+
+    await this.recordPingLog(ctx, {
+      appId,
+      action: 'ainews_cancelled',
+      targetId: orderNo ?? email,
+      summary: `AI News Gumroad 取消/退款：${email}`,
+      metadata: this.pingMeta(payload),
+    });
   }
 }
