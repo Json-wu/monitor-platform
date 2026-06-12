@@ -2,6 +2,7 @@ import {
   BadGatewayException,
   BadRequestException,
   Injectable,
+  Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import Replicate from 'replicate';
@@ -36,9 +37,37 @@ export interface UpscaleResult {
 
 @Injectable()
 export class ReplicateService {
+  private readonly logger = new Logger(ReplicateService.name);
+
+  /** Public API responses: English only, no operator / upstream details */
+  private static readonly MSG_UNAVAILABLE =
+    'Image processing service is temporarily unavailable. Please try again later.';
+  private static readonly MSG_UPSTREAM_FAILED =
+    'Image processing failed. Please try again later.';
+  private static readonly MSG_INVALID_OUTPUT =
+    'Image processing did not return a valid result. Please try again later.';
+  private static readonly MSG_IMAGE_REQUIRED = 'Image is required.';
+  private static readonly MSG_MASK_REQUIRED = 'Mask is required.';
+
   constructor(
     private readonly globalIntegration: GlobalIntegrationSettingsService,
   ) {}
+
+  private upstreamFailed(logContext: string, error: unknown): never {
+    const detail = error instanceof Error ? error.message : String(error);
+    this.logger.warn(`${logContext}: ${detail}`);
+    throw new BadGatewayException(ReplicateService.MSG_UPSTREAM_FAILED);
+  }
+
+  private missingOutput(logContext: string): never {
+    this.logger.warn(`${logContext}: no output URL`);
+    throw new BadGatewayException(ReplicateService.MSG_INVALID_OUTPUT);
+  }
+
+  private integrationUnavailable(reason: string): never {
+    this.logger.warn(`Replicate unavailable: ${reason}`);
+    throw new ServiceUnavailableException(ReplicateService.MSG_UNAVAILABLE);
+  }
 
   private async resolveRef(ref: string, token: string): Promise<string> {
     if (ref.includes(':')) return ref;
@@ -177,12 +206,10 @@ export class ReplicateService {
   }> {
     const s = await this.getSettingsForAdmin();
     if (!s.enabled) {
-      throw new ServiceUnavailableException(
-        '图片超分集成未启用（请在集成设置中开启并配置 Replicate Token）',
-      );
+      this.integrationUnavailable('integration disabled');
     }
     if (!s.apiTokenSet) {
-      throw new ServiceUnavailableException('Replicate API Token 未配置');
+      this.integrationUnavailable('API token not configured');
     }
     const c = await this.getConfigRow();
     const token = String(c.apiToken ?? '').trim();
@@ -256,11 +283,10 @@ export class ReplicateService {
         },
       );
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      throw new BadGatewayException(`CodeFormer 调用失败: ${msg}`);
+      this.upstreamFailed('CodeFormer', e);
     }
     const url = this.normalizeReplicateImageUrl(output);
-    if (!url) throw new BadGatewayException('CodeFormer 未返回有效 output URL');
+    if (!url) this.missingOutput('CodeFormer');
     return url;
   }
 
@@ -307,11 +333,10 @@ export class ReplicateService {
         { input, wait: { mode: 'poll', interval: 2000 } },
       );
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      throw new BadGatewayException(`通用超分调用失败: ${msg}`);
+      this.upstreamFailed('general upscaler', e);
     }
     const url = this.normalizeReplicateImageUrl(output);
-    if (!url) throw new BadGatewayException('通用超分模型未返回有效 output URL');
+    if (!url) this.missingOutput('general upscaler');
     return url;
   }
 
@@ -332,11 +357,10 @@ export class ReplicateService {
         },
       );
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      throw new BadGatewayException(`Anime Upscaler 调用失败: ${msg}`);
+      this.upstreamFailed('anime upscaler', e);
     }
     const url = this.normalizeReplicateImageUrl(output);
-    if (!url) throw new BadGatewayException('Anime Upscaler 未返回有效 output URL');
+    if (!url) this.missingOutput('anime upscaler');
     return url;
   }
 
@@ -350,7 +374,7 @@ export class ReplicateService {
       await this.assertReady();
 
     const image = dto.image?.trim();
-    if (!image) throw new BadRequestException('缺少 image');
+    if (!image) throw new BadRequestException(ReplicateService.MSG_IMAGE_REQUIRED);
 
     const scale = dto.scale ?? 4;
     const strength = dto.strength ?? 'standard';
@@ -383,22 +407,20 @@ export class ReplicateService {
   }> {
     const s = await this.getSettingsForAdmin();
     if (!s.enabled) {
-      throw new ServiceUnavailableException(
-        '图片超分集成未启用（请在集成设置中开启并配置 Replicate Token）',
-      );
+      this.integrationUnavailable('integration disabled');
     }
     if (!s.apiTokenSet) {
-      throw new ServiceUnavailableException('Replicate API Token 未配置');
+      this.integrationUnavailable('API token not configured');
     }
     const c = await this.getConfigRow();
     const token = String(c.apiToken ?? '').trim();
     const image = dto.image?.trim();
     const mask = dto.mask?.trim();
     if (!image) {
-      throw new BadRequestException('缺少 image');
+      throw new BadRequestException(ReplicateService.MSG_IMAGE_REQUIRED);
     }
     if (!mask) {
-      throw new BadRequestException('缺少 mask');
+      throw new BadRequestException(ReplicateService.MSG_MASK_REQUIRED);
     }
     const ref = s.lamaInpaintRef;
     const resolvedRef = await this.resolveRef(ref, token);
@@ -413,12 +435,11 @@ export class ReplicateService {
         },
       );
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      throw new BadGatewayException(`物体移除（LaMa）调用失败: ${msg}`);
+      this.upstreamFailed('inpainting', e);
     }
     const outputUrl = this.normalizeReplicateImageUrl(output);
     if (!outputUrl) {
-      throw new BadGatewayException('LaMa 模型未返回有效 output URL');
+      this.missingOutput('inpainting');
     }
     return { outputUrl };
   }
@@ -470,17 +491,15 @@ export class ReplicateService {
   }): Promise<{ outputUrls: string[] }> {
     const s = await this.getSettingsForAdmin();
     if (!s.enabled) {
-      throw new ServiceUnavailableException(
-        '图片超分集成未启用（请在集成设置中开启并配置 Replicate Token）',
-      );
+      this.integrationUnavailable('integration disabled');
     }
     if (!s.apiTokenSet) {
-      throw new ServiceUnavailableException('Replicate API Token 未配置');
+      this.integrationUnavailable('API token not configured');
     }
     const c = await this.getConfigRow();
     const token = String(c.apiToken ?? '').trim();
     const image = dto.image?.trim();
-    if (!image) throw new BadRequestException('缺少 image');
+    if (!image) throw new BadRequestException(ReplicateService.MSG_IMAGE_REQUIRED);
 
     const ref = s.proHeadshotRef;
     const resolvedRef = await this.resolveRef(ref, token);
@@ -526,10 +545,9 @@ export class ReplicateService {
     if (outputUrls.length === 0) {
       const firstError = settled.find((item) => item.status === 'rejected');
       if (firstError && firstError.status === 'rejected') {
-        const msg = firstError.reason instanceof Error ? firstError.reason.message : String(firstError.reason);
-        throw new BadGatewayException(`专业证件照调用失败: ${msg}`);
+        this.upstreamFailed('pro headshot', firstError.reason);
       }
-      throw new BadGatewayException('专业证件照模型未返回有效 output URL');
+      this.missingOutput('pro headshot');
     }
     return { outputUrls };
   }
@@ -537,19 +555,17 @@ export class ReplicateService {
   async colorize(dto: { image: string; model?: 'large' | 'tiny' }): Promise<{ outputUrl: string }> {
     const s = await this.getSettingsForAdmin();
     if (!s.enabled) {
-      throw new ServiceUnavailableException(
-        'Replicate 集成未启用（请在集成设置中开启并配置 Token）',
-      );
+      this.integrationUnavailable('integration disabled');
     }
     if (!s.apiTokenSet) {
-      throw new ServiceUnavailableException('Replicate API Token 未配置');
+      this.integrationUnavailable('API token not configured');
     }
     const c = await this.getConfigRow();
     const token = String(c.apiToken ?? '').trim();
 
     const image = dto.image?.trim();
     if (!image) {
-      throw new BadRequestException('缺少 image');
+      throw new BadRequestException(ReplicateService.MSG_IMAGE_REQUIRED);
     }
     const model_size = dto.model ?? s.ddcolorDefaultModelSize;
     const replicate = new Replicate({ auth: token, useFileOutput: false });
@@ -560,12 +576,11 @@ export class ReplicateService {
         wait: { mode: 'poll', interval: 1500 },
       });
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      throw new BadGatewayException(`Replicate 上色失败: ${msg}`);
+      this.upstreamFailed('colorize', e);
     }
     const outputUrl = this.normalizeReplicateImageUrl(output);
     if (!outputUrl?.trim()) {
-      throw new BadGatewayException('Replicate 返回结果中无有效 output URL');
+      this.missingOutput('colorize');
     }
     return { outputUrl: outputUrl.trim() };
   }
@@ -574,18 +589,16 @@ export class ReplicateService {
   async cleanScratches(dto: { image: string }): Promise<{ outputUrl: string }> {
     const s = await this.getSettingsForAdmin();
     if (!s.enabled) {
-      throw new ServiceUnavailableException(
-        'Replicate 集成未启用（请在集成设置中开启并配置 Token）',
-      );
+      this.integrationUnavailable('integration disabled');
     }
     if (!s.apiTokenSet) {
-      throw new ServiceUnavailableException('Replicate API Token 未配置');
+      this.integrationUnavailable('API token not configured');
     }
     const c = await this.getConfigRow();
     const token = String(c.apiToken ?? '').trim();
     const image = dto.image?.trim();
     if (!image) {
-      throw new BadRequestException('缺少 image');
+      throw new BadRequestException(ReplicateService.MSG_IMAGE_REQUIRED);
     }
     const ref = s.scratchRepairRef;
     const resolvedRef = await this.resolveRef(ref, token);
@@ -600,12 +613,11 @@ export class ReplicateService {
         },
       );
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      throw new BadGatewayException(`划痕修复调用失败: ${msg}`);
+      this.upstreamFailed('scratch repair', e);
     }
     const outputUrl = this.normalizeReplicateImageUrl(output);
     if (!outputUrl?.trim()) {
-      throw new BadGatewayException('划痕修复模型未返回有效 output URL');
+      this.missingOutput('scratch repair');
     }
     return { outputUrl: outputUrl.trim() };
   }
