@@ -18,6 +18,7 @@ import {
 } from '../../common/utils/integration-settings.util';
 import { firstSubscriptionMonthlyExpireUtc } from '../../common/utils/credit-billing-dates.util';
 import { SystemOperationLogService } from '../system-log/system-operation-log.service';
+import { AinewsGumroadSubscriptionService } from '../ainews/ainews-gumroad-subscription.service';
 
 export type GumroadWebhookContext = {
   ipAddress?: string;
@@ -144,6 +145,7 @@ export class GumroadService {
     private readonly prisma: PrismaService,
     private readonly globalIntegration: GlobalIntegrationSettingsService,
     private readonly systemLog: SystemOperationLogService,
+    private readonly ainewsGumroad: AinewsGumroadSubscriptionService,
   ) {}
 
   private pingMeta(payload: GumroadPingPayload): Prisma.InputJsonValue {
@@ -699,7 +701,7 @@ export class GumroadService {
   }
 
   /**
-   * industry-ai-news-pro / unlimited：原样转发 Supabase Edge，并在 chrome-ainews 下按邮箱建用户、建订单。
+   * industry-ai-news-pro / unlimited：写入插件 subscriptions 表，并在 chrome-ainews 下按邮箱建用户、建订单。
    */
   private async handleAinewsRelayPing(
     payload: GumroadPingPayload,
@@ -708,38 +710,11 @@ export class GumroadService {
   ): Promise<{ ack: string }> {
     const saleIdRaw = asString(payload.sale_id) || 'unknown';
     const meta = () => this.pingMeta(payload);
-    const rawBody = this.buildRelayRawBody(payload, ctx);
+    const bodyFields = this.gumroadPayloadToFields(payload);
+    const deactivate = AinewsGumroadSubscriptionService.parseDeactivate(bodyFields);
 
-    const relay = await this.forwardToSupabaseGumroadWebhook(
-      rawBody,
-      ctx?.contentType,
-    );
-    if (relay) {
-      if (relay.ok) {
-        this.logger.log(
-          `Gumroad ainews relay ok status=${relay.status} sale_id=${saleIdRaw}`,
-        );
-      } else if (relay.status >= 400 && relay.status < 500) {
-        this.logger.warn(
-          `Gumroad ainews relay client error status=${relay.status} body=${relay.body.slice(0, 500)}`,
-        );
-      } else {
-        this.logger.error(
-          `Gumroad ainews relay failed status=${relay.status} body=${relay.body.slice(0, 500)}`,
-        );
-      }
-      await this.recordPingLog(ctx, {
-        action: relay.ok ? 'ainews_relay_ok' : 'ainews_relay_failed',
-        targetId: saleIdRaw,
-        summary: relay.ok
-          ? `AI News Gumroad 已中继至 Supabase (${email})`
-          : `AI News Gumroad 中继失败 HTTP ${relay.status}`,
-        metadata: {
-          ...meta() as object,
-          relayStatus: relay.status,
-          relayBody: relay.body.slice(0, 2000),
-        },
-      });
+    if (!deactivate) {
+      await this.ainewsGumroad.upsertPendingFromPing(email, bodyFields, false);
     }
 
     const app = await this.resolveAinewsApplication();
@@ -760,6 +735,15 @@ export class GumroadService {
 
     if (this.isGumroadCancellation(payload)) {
       await this.applyAinewsCancellation(app.id, payload, email, ctx);
+      const user = await this.prisma.endUser.findUnique({
+        where: { appId_email: { appId: app.id, email } },
+        select: { id: true },
+      });
+      if (user) {
+        await this.ainewsGumroad.upsertFromPing(user.id, email, bodyFields, true);
+      } else {
+        await this.ainewsGumroad.upsertPendingFromPing(email, bodyFields, true);
+      }
       return { ack: 'ok' };
     }
 
@@ -771,6 +755,7 @@ export class GumroadService {
     }
 
     const user = await this.findOrCreateEndUserByEmail(app.id, email);
+    await this.ainewsGumroad.upsertFromPing(user.id, email, bodyFields, deactivate);
     const saleId = asString(payload.sale_id);
     const orderNo = saleId
       ? `GUM-${saleId}`
@@ -810,7 +795,6 @@ export class GumroadService {
     const currency =
       asString(payload.currency).toUpperCase() || plan.currency || 'USD';
     const paidAt = new Date();
-    const gatewaySubId = asString(payload.subscription_id) || undefined;
 
     await this.prisma.$transaction(async (tx) => {
       const order = existing
@@ -841,29 +825,6 @@ export class GumroadService {
               paidAt,
             },
           });
-
-      if (!grantPayg) {
-        const periodEnd = firstSubscriptionMonthlyExpireUtc(paidAt);
-        await tx.subscription.upsert({
-          where: { appId_userId: { appId: app.id, userId: user.id } },
-          create: {
-            appId: app.id,
-            userId: user.id,
-            planId: plan.id,
-            status: 'active',
-            gatewaySubId,
-            currentPeriodStart: paidAt,
-            currentPeriodEnd: periodEnd,
-          },
-          update: {
-            planId: plan.id,
-            status: 'active',
-            gatewaySubId: gatewaySubId ?? undefined,
-            currentPeriodStart: paidAt,
-            currentPeriodEnd: periodEnd,
-          },
-        });
-      }
 
       if (creditsTotal <= 0) return;
 
@@ -916,11 +877,23 @@ export class GumroadService {
         planId: plan.id,
         planName: plan.name,
         creditsGranted: creditsTotal,
-        relayOk: relay?.ok ?? null,
       },
     });
 
     return { ack: 'ok' };
+  }
+
+  private gumroadPayloadToFields(payload: GumroadPingPayload): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(payload)) {
+      if (v == null) continue;
+      if (typeof v === 'object') {
+        out[k] = JSON.stringify(v);
+      } else {
+        out[k] = asString(v) || String(v);
+      }
+    }
+    return out;
   }
 
   private async applyAinewsCancellation(

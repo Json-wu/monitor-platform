@@ -207,6 +207,23 @@ model EndUser {
   /// 调用 clearbg 等公开 API 的终端用户密钥（由用户在控制台生成，注册时不写入）
   apiKey        String?    @unique @map("end_user_api_key")
 
+  /// Industry AI News 插件资料（原 anon_users，与 end_user 统一供管理后台查看）
+  ainewsDeviceId              String    @default("") @map("ainews_device_id")
+  ainewsEmail                 String    @default("") @map("ainews_email")
+  ainewsTimezone              String    @default("") @map("ainews_timezone")
+  ainewsFollowDomains         String[]  @default([]) @map("ainews_follow_domains")
+  ainewsUiLang                String    @default("") @map("ainews_ui_lang")
+  ainewsUiTheme               String    @default("system") @map("ainews_ui_theme")
+  ainewsSystemLanguage        String    @default("") @map("ainews_system_language")
+  ainewsReminderMode          String    @default("realtime") @map("ainews_reminder_mode")
+  ainewsReminderDnd           Boolean   @default(false) @map("ainews_reminder_dnd")
+  ainewsReminderIntervalMinutes Int     @default(5) @map("ainews_reminder_interval_minutes")
+  ainewsReminderWindowStartHour Int     @default(9) @map("ainews_reminder_window_start_hour")
+  ainewsReminderWindowEndHour   Int     @default(18) @map("ainews_reminder_window_end_hour")
+  ainewsUserTier              String    @default("free") @map("ainews_user_tier")
+  ainewsLastSeenIp            String    @default("") @map("ainews_last_seen_ip")
+  ainewsLinkedAt              DateTime? @map("ainews_linked_at") @db.Timestamptz
+
   creditAccount CreditAccount?
   orders        Order[]
   subscriptions Subscription[]
@@ -214,9 +231,13 @@ model EndUser {
   endUserAuditLogs EndUserAuditLog[]
   clientActivityLogs ClientActivityLog[]
 
+  ainewsExtensionPreferences  AinewsExtensionPreferences?
+  ainewsEmailDigestBriefs     AinewsEmailDigestBrief[]
+
   @@unique([appId, email])
   @@index([appId, status])
   @@index([email])
+  @@index([appId, ainewsDeviceId])
   @@map("end_user")
 }
 
@@ -512,4 +533,160 @@ model NotificationLog {
   @@index([appId, createdAt])
   @@index([userId, createdAt])
   @@map("notification_log")
+}
+
+// ─── Industry AI News (Chrome extension) ─────────────────
+
+model AinewsArticle {
+  id           BigInt   @id @default(autoincrement())
+  canonicalUrl String   @unique @map("canonical_url")
+  sourceUrl    String   @map("source_url")
+  title        String
+  publishedAt  DateTime @map("published_at") @db.Timestamptz
+  source       String   @default("")
+  domains      String[]
+  rawSummary   String?  @map("raw_summary")
+  imageUrl     String?  @map("image_url")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([publishedAt(sort: Desc)])
+  @@map("articles")
+}
+
+model AinewsArticleSummaryCache {
+  url       String
+  locale    String   @default("en")
+  title     String   @default("")
+  summary   String   @default("")
+  model     String   @default("")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@id([url, locale])
+  @@map("article_summary_cache")
+}
+
+model AinewsUserPrefsLog {
+  id                      BigInt   @id @default(autoincrement())
+  userId                  String   @map("user_id") @db.Uuid
+  ip                      String   @default("")
+  timezone                String   @default("")
+  followDomains           String[] @default([]) @map("follow_domains")
+  reminderMode            String   @default("") @map("reminder_mode")
+  reminderDnd             Boolean  @default(false) @map("reminder_dnd")
+  reminderIntervalMinutes Int      @default(0) @map("reminder_interval_minutes")
+  reminderWindowStartHour Int      @default(0) @map("reminder_window_start_hour")
+  reminderWindowEndHour   Int      @default(0) @map("reminder_window_end_hour")
+  uiLang                  String   @default("") @map("ui_lang")
+  uiTheme                 String   @default("") @map("ui_theme")
+  systemLanguage          String   @default("") @map("system_language")
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("user_prefs_logs")
+}
+
+model AinewsArticleUserState {
+  userId       String    @map("user_id") @db.Uuid
+  canonicalUrl String    @map("canonical_url")
+  liked        Boolean   @default(false)
+  disliked     Boolean   @default(false)
+  read         Boolean   @default(false)
+  likeCount    Int       @default(0) @map("like_count")
+  dislikeCount Int       @default(0) @map("dislike_count")
+  readCount    Int       @default(0) @map("read_count")
+  likedAt      DateTime? @map("liked_at") @db.Timestamptz
+  dislikedAt   DateTime? @map("disliked_at") @db.Timestamptz
+  readAt       DateTime? @map("read_at") @db.Timestamptz
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@id([userId, canonicalUrl])
+  @@map("article_user_state")
+}
+
+model AinewsArticleActionEvent {
+  id           BigInt   @id @default(autoincrement())
+  userId       String   @map("user_id") @db.Uuid
+  action       String
+  canonicalUrl String   @map("canonical_url")
+  sourceUrl    String   @default("") @map("source_url")
+  ip           String   @default("")
+  timezone     String   @default("")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([createdAt(sort: Desc)])
+  @@map("article_action_events")
+}
+
+model AinewsExtensionPreferences {
+  endUserId              String    @id @map("end_user_id") @db.Uuid
+  endUser                EndUser   @relation(fields: [endUserId], references: [id], onDelete: Cascade)
+  industryIds            String[]  @default([]) @map("industry_ids")
+  isPro                  Boolean   @default(false) @map("is_pro")
+  reminderMode           String    @default("every2h") @map("reminder_mode")
+  reminderEmail          String    @default("") @map("reminder_email")
+  newsMockOnly           Boolean   @default(false) @map("news_mock_only")
+  uiTheme                String    @default("light") @map("ui_theme")
+  onboardingComplete     Boolean   @default(false) @map("onboarding_complete")
+  followKeywords         String[]  @default([]) @map("follow_keywords")
+  lastEmailDigestAt      DateTime? @map("last_email_digest_at") @db.Timestamptz
+  emailDigestOptOut      Boolean   @default(false) @map("email_digest_opt_out")
+  timezone               String    @default("UTC")
+  uiLang                 String    @default("en") @map("ui_lang")
+  lastDailyDigestDate    DateTime? @map("last_daily_digest_date") @db.Date
+  emailDigestTrialSentAt DateTime? @map("email_digest_trial_sent_at") @db.Timestamptz
+  updatedAt              DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("user_extension_preferences")
+}
+
+model AinewsLlmUsageDaily {
+  userId         String   @map("user_id") @db.Uuid
+  usageDay       DateTime @map("usage_day") @db.Date
+  summarizeCalls Int      @default(0) @map("summarize_calls")
+
+  @@id([userId, usageDay])
+  @@map("user_llm_usage_daily")
+}
+
+model AinewsPendingSubscription {
+  email                 String   @id
+  plan                  String
+  status                String   @default("active")
+  gumroadSaleId         String?  @map("gumroad_sale_id")
+  gumroadSubscriptionId String?  @map("gumroad_subscription_id")
+  gumroadProductId      String   @default("") @map("gumroad_product_id")
+  lastPaidAt            DateTime? @map("last_paid_at") @db.Timestamptz
+  currentPeriodStart    DateTime? @map("current_period_start") @db.Timestamptz
+  currentPeriodEnd      DateTime? @map("current_period_end") @db.Timestamptz
+  recurrence            String?
+  rawPayload            Json?    @map("raw_payload")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("pending_subscriptions")
+}
+
+model AinewsEmailDigestBrief {
+  id              BigInt   @id @default(autoincrement())
+  endUserId       String   @map("end_user_id") @db.Uuid
+  endUser         EndUser  @relation(fields: [endUserId], references: [id], onDelete: Cascade)
+  digestDate      DateTime @map("digest_date") @db.Date
+  briefHtml       String   @default("") @map("brief_html")
+  briefText       String   @default("") @map("brief_text")
+  downloadToken   String?  @map("download_token")
+  pdfStoragePath  String?  @map("pdf_storage_path")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([endUserId, digestDate])
+  @@map("email_digest_briefs")
+}
+
+model AinewsEdgeJobLock {
+  jobName     String   @id @map("job_name")
+  lockedUntil DateTime @map("locked_until") @db.Timestamptz
+  workerId    String   @default("") @map("worker_id")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("edge_job_locks")
 }

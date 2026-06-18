@@ -54,7 +54,7 @@ async function bootstrap() {
     }
     // 本地开发：管理后台默认 3002（见 monitor/frontend/package.json），避免仅配了 3001 时漏掉 3002
     if (process.env.NODE_ENV !== 'production') {
-      for (const o of ['http://localhost:3001', 'http://localhost:3002']) {
+      for (const o of ['http://localhost:3011', 'http://localhost:3002']) {
         if (!seen.has(o)) {
           seen.add(o);
           out.push(o);
@@ -63,7 +63,7 @@ async function bootstrap() {
     }
     return out.length > 0
       ? out
-      : ['http://localhost:3001', 'http://localhost:3002'];
+      : ['http://localhost:3011', 'http://localhost:3002'];
   }
   const corsOrigins = collectCorsOrigins();
 

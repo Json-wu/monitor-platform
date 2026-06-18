@@ -32,7 +32,7 @@ export class GumroadWebhookController {
     summary: 'Gumroad Ping（产品销售/退款通知）',
     description:
       '请求体由 Gumroad 发送，application/x-www-form-urlencoded。校验 seller_id 后按邮箱与方案 payment_link 自动发放积分；幂等以 sale_id 作为订单编号。' +
-      ' industry-ai-news-pro / unlimited 会原样中继至 Supabase gumroad-webhook，并在应用 chrome-ainews 下按邮箱建用户与订单。',
+      ' industry-ai-news-pro / unlimited 会在 chrome-ainews 下写入插件 subscriptions 并建用户/订单。',
   })
   @ApiOkResponse({
     description: '成功受理',

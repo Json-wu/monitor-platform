@@ -26,7 +26,12 @@
     "prisma:update-clearbg-slug": "ts-node prisma/scripts/update-clearbg-slug.ts",
     "prisma:update-clearbg-slug:sql": "prisma db execute --file prisma/scripts/update-clearbg-slug.sql",
     "prisma:studio": "prisma studio",
-    "db:setup": "prisma migrate dev --name init && ts-node prisma/seed.ts"
+    "db:setup": "prisma migrate dev --name init && ts-node prisma/seed.ts",
+    "db:backup:ainews": "bash scripts/backup-ainews-public.sh",
+    "db:sync:ainews:core": "node scripts/sync-ainews-core.mjs",
+    "db:migrate:ainews": "node scripts/migrate-ainews-from-supabase.mjs",
+    "db:migrate:ainews:cli": "bash scripts/migrate-ainews-cli.sh",
+    "db:migrate:ainews:from-dump": "node scripts/migrate-ainews-from-dump.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -42,6 +47,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "dotenv": "^17.4.1",
+    "fast-xml-parser": "^5.9.2",
     "google-auth-library": "^10.6.2",
     "nodemailer": "^8.0.5",
     "passport": "^0.7.0",

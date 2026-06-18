@@ -21,6 +21,7 @@ import { PublicEndUserAuthModule } from './modules/public-end-user-auth/public-e
 import { LinkmePayModule } from './modules/linkmepay/linkmepay.module';
 import { GumroadModule } from './modules/gumroad/gumroad.module';
 import { CreditSchedulerModule } from './modules/credit-scheduler/credit-scheduler.module';
+import { AinewsModule } from './modules/ainews/ainews.module';
 import { GlobalIntegrationModule } from './modules/global-integration/global-integration.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RbacGuard } from './common/guards/rbac.guard';
@@ -49,6 +50,7 @@ import { RbacGuard } from './common/guards/rbac.guard';
     LinkmePayModule,
     GumroadModule,
     CreditSchedulerModule,
+    AinewsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
