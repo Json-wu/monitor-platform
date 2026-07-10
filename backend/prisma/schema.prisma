@@ -92,6 +92,13 @@ enum TriggerEvent {
   credits_granted
 }
 
+enum FeedbackStatus {
+  pending
+  reviewed
+  resolved
+  archived
+}
+
 enum NotificationStatus {
   draft
   queued
@@ -125,6 +132,7 @@ model Application {
   coupons        Coupon[]
   endUserAuditLogs EndUserAuditLog[]
   clientActivityLogs ClientActivityLog[]
+  userFeedbacks  UserFeedback[]
   notificationTemplates NotificationTemplate[]
   notificationLogs NotificationLog[]
   emailVerificationCodes EmailVerificationCode[]
@@ -230,6 +238,7 @@ model EndUser {
   notifications NotificationLog[]
   endUserAuditLogs EndUserAuditLog[]
   clientActivityLogs ClientActivityLog[]
+  userFeedbacks UserFeedback[]
 
   ainewsExtensionPreferences  AinewsExtensionPreferences?
   ainewsEmailDigestBriefs     AinewsEmailDigestBrief[]
@@ -437,6 +446,29 @@ model EndUserAuditLog {
   @@index([endUserId, createdAt])
   @@index([module, createdAt])
   @@map("end_user_audit_log")
+}
+
+/// 应用内用户反馈（疑问 / 建议）
+model UserFeedback {
+  id        String         @id @default(uuid()) @db.Uuid
+  appId     String         @map("app_id") @db.Uuid
+  app       Application    @relation(fields: [appId], references: [id], onDelete: Cascade)
+  endUserId String?        @map("end_user_id") @db.Uuid
+  endUser   EndUser?       @relation(fields: [endUserId], references: [id], onDelete: SetNull)
+  nickname  String         @db.VarChar(128)
+  email     String         @db.VarChar(320)
+  subject   String         @db.VarChar(256)
+  message   String
+  status    FeedbackStatus @default(pending)
+  ipAddress String?        @map("ip_address")
+  userAgent String?        @map("user_agent")
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+
+  @@index([appId, createdAt])
+  @@index([appId, status])
+  @@index([email])
+  @@map("user_feedback")
 }
 
 /// 官网 / 匿名访客行为（含登录后可选 endUserId）

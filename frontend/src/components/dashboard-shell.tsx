@@ -13,6 +13,7 @@ import {
   LogOut,
   Logs,
   Layers,
+  MessageSquareText,
   ScrollText,
   Shield,
   Tags,
@@ -31,6 +32,7 @@ const navItems = [
   { path: "/orders", label: "订单", icon: CreditCard, permission: "orders:view" },
   { path: "/pricing", label: "定价", icon: Tags, permission: "pricing:view" },
   { path: "/logs", label: "终端活动", icon: Logs, permission: "audit:view" },
+  { path: "/feedback", label: "用户反馈", icon: MessageSquareText, permission: "feedback:view" },
   { path: "/notifications", label: "通知", icon: Bell, permission: "notifications:view" },
 ];
 

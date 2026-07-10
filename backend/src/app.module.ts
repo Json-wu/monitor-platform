@@ -23,6 +23,7 @@ import { GumroadModule } from './modules/gumroad/gumroad.module';
 import { CreditSchedulerModule } from './modules/credit-scheduler/credit-scheduler.module';
 import { AinewsModule } from './modules/ainews/ainews.module';
 import { GlobalIntegrationModule } from './modules/global-integration/global-integration.module';
+import { FeedbackModule } from './modules/feedback/feedback.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RbacGuard } from './common/guards/rbac.guard';
 
@@ -51,6 +52,7 @@ import { RbacGuard } from './common/guards/rbac.guard';
     GumroadModule,
     CreditSchedulerModule,
     AinewsModule,
+    FeedbackModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

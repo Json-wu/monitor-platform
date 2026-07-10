@@ -23,6 +23,7 @@ async function main() {
         audit: ['view', 'export'],
         analytics: ['view', 'export'],
         notifications: ['view', 'create', 'edit', 'delete'],
+        feedback: ['view', 'edit', 'delete'],
         quotas: ['view', 'edit'],
         config: ['view', 'edit'],
         system_logs: ['view'],
@@ -43,6 +44,7 @@ async function main() {
         audit: ['view', 'export'],
         analytics: ['view', 'export'],
         notifications: ['view', 'create', 'edit', 'delete'],
+        feedback: ['view', 'edit', 'delete'],
         quotas: ['view', 'edit'],
         config: ['view', 'edit'],
         system_logs: ['view'],
@@ -54,7 +56,20 @@ async function main() {
 
   await prisma.role.upsert({
     where: { name: 'app_admin' },
-    update: {},
+    update: {
+      permissions: {
+        apps: ['view', 'edit'],
+        users: ['view', 'create', 'edit', 'delete'],
+        credits: ['view', 'create', 'edit'],
+        orders: ['view', 'edit', 'refund'],
+        pricing: ['view', 'create', 'edit', 'delete'],
+        audit: ['view'],
+        analytics: ['view'],
+        notifications: ['view', 'create', 'edit'],
+        feedback: ['view', 'edit', 'delete'],
+        quotas: ['view', 'edit'],
+      },
+    },
     create: {
       name: 'app_admin',
       displayName: 'App Admin',
@@ -68,6 +83,7 @@ async function main() {
         audit: ['view'],
         analytics: ['view'],
         notifications: ['view', 'create', 'edit'],
+        feedback: ['view', 'edit', 'delete'],
         quotas: ['view', 'edit'],
       },
     },
@@ -86,6 +102,7 @@ async function main() {
         orders: ['view'],
         audit: ['view'],
         analytics: ['view'],
+        feedback: ['view', 'edit'],
       },
     },
   });
@@ -119,6 +136,7 @@ async function main() {
         orders: ['view'],
         analytics: ['view'],
         audit: ['view'],
+        feedback: ['view'],
       },
     },
   });
