@@ -151,6 +151,7 @@ ENV_FILE=/path/to/custom.env sh scripts/build-push.sh all
 - **触发**：推送到 `main` 时按改动路径自动构建（仅 `frontend/**` 改动只构前端，`backend/**` 改动只构后端，二者都改则并行）；也可在 Actions 页 **Run workflow** 手动指定 `frontend / backend / all` 与 tag。
 - **缓存**：使用 `type=gha` Buildx 缓存，第二次起的 `npm ci` / 编译层基本走缓存，远快于本地。
 - **产物 tag**：每次推送两个 tag —— 输入 tag（默认 `latest`）+ `sha-<short>`，便于回滚。
+- **自动部署**：镜像推送成功后，若配置了 `DEPLOY_HOST`，会 SSH 到服务器执行 `docker compose pull` + `up -d`（仅更新本次构建成功的服务）。后端容器启动命令已含 `prisma migrate deploy`。
 
 **首次启用前**在 GitHub 仓库 `Settings → Secrets and variables → Actions` 配置：
 
@@ -162,8 +163,26 @@ ENV_FILE=/path/to/custom.env sh scripts/build-push.sh all
 | Variable | `NEXT_PUBLIC_API_BASE_URL` | 浏览器访问后端的根地址（无末尾斜杠） |
 | Variable（可选） | `FRONTEND_IMAGE_NAME` | 默认 `monitor-admin-frontend` |
 | Variable（可选） | `BACKEND_IMAGE_NAME` | 默认 `monitor-admin-backend` |
+| Variable | `DEPLOY_HOST` | 部署机公网 IP 或域名；**留空则跳过 SSH 部署** |
+| Variable（可选） | `DEPLOY_PATH` | 服务器上 `docker-compose.yml` 所在目录，默认 `/opt/monitor-platform` |
+| Variable（可选） | `DEPLOY_SSH_PORT` | SSH 端口，默认 `22` |
+| Secret | `DEPLOY_USER` | SSH 登录用户（需能执行 `docker` / `docker compose`） |
+| Secret | `DEPLOY_SSH_KEY` | 对应私钥全文（含 `-----BEGIN ... PRIVATE KEY-----`） |
 
-推送完成后，在目标环境拉取镜像，配置 **端口**（前端容器 **3011**，后端 **4010**）、**健康检查**、**运行时环境变量**（如 `DATABASE_URL`、`JWT_SECRET`、`ADMIN_ORIGIN` 等），并在首次部署或发版时对后端执行 **`prisma migrate deploy`**。
+**服务器一次性准备**（路径与 `DEPLOY_PATH` 一致）：
+
+```bash
+# 例：/opt/monitor-platform
+mkdir -p /opt/monitor-platform && cd /opt/monitor-platform
+# 放入 docker-compose.yml、deploy.sh（可从仓库 deploy/server/ 复制）、.env（由 prod.env.example 填写）
+# 确保 .env 中 IMAGE_TAG=latest（与 CI 默认 tag 一致），且已能 docker login ACR
+chmod +x deploy.sh
+# 首次：docker compose up -d
+```
+
+手动部署（不走 CI）也可在服务器执行：`sh deploy.sh` 或 `sh deploy.sh backend`。
+
+手动 Run workflow 时可关闭 **deploy**，只推镜像不重启。
 
 ### 2. 镜像说明（自行 docker build 时）
 
