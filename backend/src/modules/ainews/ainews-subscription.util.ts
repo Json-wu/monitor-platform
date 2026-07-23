@@ -81,19 +81,33 @@ export async function loadAinewsPlatformSubscription(
   const appId = await resolveAinewsAppId(prisma);
   return prisma.subscription.findUnique({
     where: { appId_userId: { appId, userId: endUserId } },
-    include: { plan: { select: { slug: true, name: true } } },
+    include: {
+      plan: { select: { slug: true, name: true, paymentLink: true } },
+    },
   });
+}
+
+export function paidPlanFromPricingPlan(plan: {
+  slug: string;
+  name?: string | null;
+  paymentLink?: string | null;
+}): PaidPlan | null {
+  return (
+    paidPlanFromPricingSlug(plan.slug) ||
+    paidPlanFromPricingSlug(plan.name ?? '') ||
+    paidPlanFromPricingSlug(plan.paymentLink ?? '')
+  );
 }
 
 export function tierFromPlatformSubscription(
   sub: {
     status: SubStatus;
     currentPeriodEnd: Date;
-    plan: { slug: string };
+    plan: { slug: string; name?: string | null; paymentLink?: string | null };
   } | null,
 ): EffectiveTier {
   if (!sub) return 'free';
-  const plan = paidPlanFromPricingSlug(sub.plan.slug);
+  const plan = paidPlanFromPricingPlan(sub.plan);
   const status = subStatusToPluginStatus(sub.status);
   return effectiveTierFromSubscription(plan, status, sub.currentPeriodEnd);
 }
@@ -103,11 +117,11 @@ export function toAinewsSubscriptionView(
     status: SubStatus;
     currentPeriodStart: Date;
     currentPeriodEnd: Date;
-    plan: { slug: string };
+    plan: { slug: string; name?: string | null; paymentLink?: string | null };
   } | null,
 ): AinewsSubscriptionView | null {
   if (!sub) return null;
-  const plan = paidPlanFromPricingSlug(sub.plan.slug) ?? sub.plan.slug;
+  const plan = paidPlanFromPricingPlan(sub.plan) ?? sub.plan.slug;
   return {
     plan,
     status: subStatusToPluginStatus(sub.status),

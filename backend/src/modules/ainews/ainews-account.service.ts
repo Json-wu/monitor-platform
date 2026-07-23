@@ -83,13 +83,67 @@ export class AinewsAccountService {
     if (email) {
       await this.mergePendingForEmail(email, endUserId);
     }
-    const sub = await loadAinewsPlatformSubscription(this.prisma, endUserId);
-    const tier = tierFromPlatformSubscription(sub);
+
+    const ainewsAppId = await resolveAinewsAppId(this.prisma);
+    const jwtUser = await this.prisma.endUser.findUnique({
+      where: { id: endUserId },
+      select: { id: true, email: true, appId: true, ainewsUserTier: true },
+    });
+
+    // 订阅写在 chrome-ainews 应用下；JWT 可能是同邮箱其它应用的用户，需按邮箱落到 ainews 用户
+    let ainewsUserId = endUserId;
+    if (!jwtUser || jwtUser.appId !== ainewsAppId) {
+      const normalized = (email ?? jwtUser?.email ?? '').trim().toLowerCase();
+      if (normalized) {
+        const byEmail = await this.prisma.endUser.findUnique({
+          where: { appId_email: { appId: ainewsAppId, email: normalized } },
+          select: { id: true, ainewsUserTier: true },
+        });
+        if (byEmail) {
+          ainewsUserId = byEmail.id;
+          await this.mergePendingForEmail(normalized, byEmail.id);
+        }
+      }
+    }
+
+    let sub = await loadAinewsPlatformSubscription(this.prisma, ainewsUserId);
+
+    // 同邮箱兜底：JWT 用户无订阅时，查 ainews 应用下该邮箱用户的订阅
+    if (!sub) {
+      const normalized = (email ?? jwtUser?.email ?? '').trim().toLowerCase();
+      if (normalized && ainewsUserId === endUserId) {
+        const byEmail = await this.prisma.endUser.findUnique({
+          where: { appId_email: { appId: ainewsAppId, email: normalized } },
+          select: { id: true },
+        });
+        if (byEmail && byEmail.id !== endUserId) {
+          sub = await loadAinewsPlatformSubscription(this.prisma, byEmail.id);
+        }
+      }
+    }
+
+    let tier = tierFromPlatformSubscription(sub);
     const view = toAinewsSubscriptionView(sub);
+
+    // 订阅存在但 slug 无法识别时，回退 end_user.ainews_user_tier
+    if (tier === 'free' && sub?.status === 'active') {
+      const tierField =
+        (
+          await this.prisma.endUser.findUnique({
+            where: { id: ainewsUserId },
+            select: { ainewsUserTier: true },
+          })
+        )?.ainewsUserTier?.trim()
+          .toLowerCase() ?? '';
+      if (tierField === 'pro' || tierField === 'unlimited') {
+        tier = tierField;
+      }
+    }
+
     return {
       tier,
       limits: limitsForTier(tier),
-      email,
+      email: email ?? jwtUser?.email ?? null,
       subscription: view,
     };
   }

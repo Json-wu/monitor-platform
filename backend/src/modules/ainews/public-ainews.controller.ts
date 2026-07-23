@@ -51,6 +51,7 @@ export class PublicAinewsController {
       const payload = await this.jwt.verifyAsync<{
         typ?: string;
         sub?: string;
+        email?: string;
         appId?: string;
       }>(token);
       if (payload.typ !== 'end_user' || !payload.sub) return null;
@@ -60,7 +61,7 @@ export class PublicAinewsController {
       });
       return {
         endUserId: payload.sub,
-        email: endUser?.email ?? null,
+        email: endUser?.email ?? payload.email ?? null,
       };
     } catch {
       return null;
