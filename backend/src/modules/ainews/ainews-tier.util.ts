@@ -48,14 +48,67 @@ export function planFromGumroadProduct(
   permalink: string,
   proId: string,
   unlimitedId: string,
+  extraNeedles: string[] = [],
 ): PaidPlan | null {
   const pid = productId.trim();
-  const link = permalink.trim().toLowerCase();
+  const haystacks = [permalink, ...extraNeedles]
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+
   if (unlimitedId && pid === unlimitedId) return 'unlimited';
   if (proId && pid === proId) return 'pro';
-  if (link.includes('industry-ai-news-unlimited')) return 'unlimited';
-  if (link.includes('industry-ai-news-pro')) return 'pro';
+
+  const salePro = (process.env.GUMROAD_SALE_PRODUCT_ID_PRO ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const saleUnl = (process.env.GUMROAD_SALE_PRODUCT_ID_UNLIMITED ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (pid && saleUnl.includes(pid)) return 'unlimited';
+  if (pid && salePro.includes(pid)) return 'pro';
+
+  for (const link of haystacks) {
+    if (link.includes('industry-ai-news-unlimited')) return 'unlimited';
+  }
+  for (const link of haystacks) {
+    if (link.includes('industry-ai-news-pro')) return 'pro';
+  }
+  if (unlimitedId) {
+    const u = unlimitedId.toLowerCase();
+    if (haystacks.some((h) => h.includes(u))) return 'unlimited';
+  }
+  if (proId) {
+    const p = proId.toLowerCase();
+    if (haystacks.some((h) => h.includes(p))) return 'pro';
+  }
   return null;
+}
+
+/** 从多个 Gumroad 字段中解析 Pro / Unlimited（避免 short_product_id 短码挡住完整 permalink） */
+export function planFromGumroadFields(
+  body: Record<string, string>,
+  proId = process.env.GUMROAD_PRODUCT_ID_PRO?.trim() || 'industry-ai-news-pro',
+  unlimitedId =
+    process.env.GUMROAD_PRODUCT_ID_UNLIMITED?.trim() ||
+    'industry-ai-news-unlimited',
+): PaidPlan | null {
+  const productId = (body.product_id ?? '').trim();
+  const needles = [
+    body.product_permalink ?? '',
+    body.permalink ?? '',
+    body.short_product_id ?? '',
+    body.product_name ?? '',
+    body.url ?? '',
+  ];
+  return planFromGumroadProduct(
+    productId,
+    needles.join(' '),
+    proId,
+    unlimitedId,
+    needles,
+  );
 }
 
 export function effectiveTierFromSubscription(

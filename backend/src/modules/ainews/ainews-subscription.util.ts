@@ -17,8 +17,19 @@ export type AinewsSubscriptionView = {
 
 export function paidPlanFromPricingSlug(slug: string): PaidPlan | null {
   const s = slug.trim().toLowerCase();
-  if (s.includes('unlimited')) return 'unlimited';
-  if (s.includes('pro')) return 'pro';
+  if (!s) return null;
+  if (
+    s.includes('industry-ai-news-unlimited') ||
+    /(^|[^a-z])unlimited([^a-z]|$)/.test(s)
+  ) {
+    return 'unlimited';
+  }
+  if (
+    s.includes('industry-ai-news-pro') ||
+    /(^|[^a-z])pro([^a-z]|$)/.test(s)
+  ) {
+    return 'pro';
+  }
   return null;
 }
 

@@ -19,6 +19,8 @@ import {
 import { firstSubscriptionMonthlyExpireUtc } from '../../common/utils/credit-billing-dates.util';
 import { SystemOperationLogService } from '../system-log/system-operation-log.service';
 import { AinewsGumroadSubscriptionService } from '../ainews/ainews-gumroad-subscription.service';
+import { paidPlanFromPricingSlug } from '../ainews/ainews-subscription.util';
+import type { PaidPlan } from '../ainews/ainews-tier.util';
 
 export type GumroadWebhookContext = {
   ipAddress?: string;
@@ -650,56 +652,6 @@ export class GumroadService {
     return Buffer.from(params.toString(), 'utf8');
   }
 
-  private async forwardToSupabaseGumroadWebhook(
-    rawBody: Buffer,
-    contentType?: string,
-  ): Promise<SupabaseRelayResult | null> {
-    const url = process.env.SUPABASE_GUMROAD_WEBHOOK_URL?.trim();
-    if (!url) {
-      this.logger.warn(
-        'SUPABASE_GUMROAD_WEBHOOK_URL not set; skipping ainews relay forward',
-      );
-      return null;
-    }
-
-    const anonKey = process.env.SUPABASE_ANON_KEY?.trim();
-    const secret = process.env.GUMROAD_WEBHOOK_SECRET?.trim();
-    const headers: Record<string, string> = {
-      'Content-Type':
-        contentType?.trim() || 'application/x-www-form-urlencoded',
-    };
-    if (anonKey) {
-      headers.apikey = anonKey;
-      headers.Authorization = `Bearer ${anonKey}`;
-    }
-    if (secret) headers['x-gumroad-signature'] = secret;
-
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: new Uint8Array(rawBody),
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`Gumroad ainews relay fetch failed: ${msg}`);
-      return { status: 0, body: msg, ok: false };
-    }
-
-    const body = await res.text();
-    let upstreamOk = res.ok;
-    if (res.ok) {
-      try {
-        const parsed = JSON.parse(body) as { ok?: unknown };
-        upstreamOk = parsed.ok === true;
-      } catch {
-        upstreamOk = false;
-      }
-    }
-    return { status: res.status, body, ok: upstreamOk };
-  }
-
   /**
    * industry-ai-news-pro / unlimited：写入插件 subscriptions 表，并在 chrome-ainews 下按邮箱建用户、建订单。
    */
@@ -755,7 +707,18 @@ export class GumroadService {
     }
 
     const user = await this.findOrCreateEndUserByEmail(app.id, email);
-    await this.ainewsGumroad.upsertFromPing(user.id, email, bodyFields, deactivate);
+    // 优先用已匹配的 PricingPlan 推断 pro/unlimited，避免 Gumroad 短 permalink 识别失败
+    const forcedPlan: PaidPlan | null =
+      paidPlanFromPricingSlug(plan.slug) ||
+      paidPlanFromPricingSlug(plan.paymentLink ?? '') ||
+      paidPlanFromPricingSlug(plan.name);
+    await this.ainewsGumroad.upsertFromPing(
+      user.id,
+      email,
+      bodyFields,
+      deactivate,
+      forcedPlan,
+    );
     const saleId = asString(payload.sale_id);
     const orderNo = saleId
       ? `GUM-${saleId}`
@@ -826,6 +789,32 @@ export class GumroadService {
             },
           });
 
+      // 订阅型方案：写入 platform subscription（AI News 档位依赖此表）
+      if (!grantPayg) {
+        const periodEnd = firstSubscriptionMonthlyExpireUtc(paidAt);
+        const gatewaySubId = asString(payload.subscription_id) || undefined;
+        await tx.subscription.upsert({
+          where: { appId_userId: { appId: app.id, userId: user.id } },
+          create: {
+            appId: app.id,
+            userId: user.id,
+            planId: plan.id,
+            status: 'active',
+            gatewaySubId,
+            currentPeriodStart: paidAt,
+            currentPeriodEnd: periodEnd,
+          },
+          update: {
+            planId: plan.id,
+            status: 'active',
+            gatewaySubId: gatewaySubId ?? undefined,
+            currentPeriodStart: paidAt,
+            currentPeriodEnd: periodEnd,
+            cancelAt: null,
+          },
+        });
+      }
+
       if (creditsTotal <= 0) return;
 
       let account = await tx.creditAccount.findUnique({
@@ -877,6 +866,7 @@ export class GumroadService {
         planId: plan.id,
         planName: plan.name,
         creditsGranted: creditsTotal,
+        paidPlan: forcedPlan,
       },
     });
 
