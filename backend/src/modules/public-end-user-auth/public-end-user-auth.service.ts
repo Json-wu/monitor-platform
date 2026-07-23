@@ -16,6 +16,8 @@ import {
   maskEndUserApiKey,
 } from '../../common/utils/end-user-api-key.util';
 import { NotificationService } from '../notification/notification.service';
+import { CreditReasonCode } from '../credit/credit-reason-codes';
+import { signupBonusCredits } from '../../common/utils/credit-env.util';
 import {
   CompleteRegisterDto,
   EndUserLoginDto,
@@ -89,6 +91,39 @@ export class PublicEndUserAuthService {
     if (app.status !== 'active')
       throw new BadRequestException('Application is not available');
     return app;
+  }
+
+  /** 注册时创建积分账户并写入注册赠送（payg，数量见 SIGNUP_BONUS_CREDITS） */
+  private async createAccountWithSignupBonus(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    appId: string,
+  ) {
+    const bonus = signupBonusCredits();
+    const account = await tx.creditAccount.create({
+      data: {
+        userId,
+        appId,
+        balanceSub: 0,
+        balancePayg: bonus,
+        balancePromo: 0,
+        totalEarned: bonus,
+      },
+    });
+    if (bonus > 0) {
+      await tx.creditTransaction.create({
+        data: {
+          accountId: account.id,
+          appId,
+          type: 'grant',
+          creditType: 'payg',
+          amount: bonus,
+          balanceAfter: bonus,
+          reason: CreditReasonCode.SignupBonusGrant,
+        },
+      });
+    }
+    return account;
   }
 
   async sendRegisterCode(slug: string, dto: SendRegisterCodeDto) {
@@ -253,9 +288,7 @@ export class PublicEndUserAuthService {
           status: UserStatus.active,
         },
       });
-      await tx.creditAccount.create({
-        data: { userId: u.id, appId: app.id },
-      });
+      await this.createAccountWithSignupBonus(tx, u.id, app.id);
       return u;
     });
 
@@ -377,9 +410,7 @@ export class PublicEndUserAuthService {
               status: UserStatus.active,
             },
           });
-          await tx.creditAccount.create({
-            data: { userId: u.id, appId: app.id, balanceSub: 0, balancePayg: 0, balancePromo: 1},
-          });
+          await this.createAccountWithSignupBonus(tx, u.id, app.id);
           return u;
         });
       }

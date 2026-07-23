@@ -6,8 +6,7 @@ import {
   nextSubscriptionMonthlyExpireUtc,
   utcDateKey,
 } from '../../common/utils/credit-billing-dates.util';
-
-const DAILY_PROMO_TARGET = 1;
+import { dailyPromoCredits } from '../../common/utils/credit-env.util';
 
 @Injectable()
 export class CreditSchedulerService {
@@ -19,7 +18,7 @@ export class CreditSchedulerService {
     return process.env.DISABLE_CREDIT_SCHEDULER === '1';
   }
 
-  /** 每日 UTC 0:00：全应用活跃终端用户 promo 池重置为 1（已为 1 则跳过余额变更，仍标记当日已处理）。 */
+  /** 每日 UTC 0:00：全应用活跃终端用户 promo 池重置为 DAILY_PROMO_CREDITS（默认 1）。 */
   @Cron('0 0 * * *', { timeZone: 'UTC' })
   async runUtcMidnightCreditJobs(): Promise<void> {
     if (this.schedulerDisabled()) return;
@@ -42,25 +41,32 @@ export class CreditSchedulerService {
 
   private async resetDailyPromoForAllActiveUsers(): Promise<void> {
     const todayUtc = utcDateKey(new Date());
+    const target = dailyPromoCredits();
     const users = await this.prisma.endUser.findMany({
       where: { status: 'active' },
       select: { id: true, appId: true },
     });
     let touched = 0;
     for (const u of users) {
-      const did = await this.resetDailyPromoForUser(u.id, u.appId, todayUtc);
+      const did = await this.resetDailyPromoForUser(
+        u.id,
+        u.appId,
+        todayUtc,
+        target,
+      );
       if (did) touched++;
     }
     this.logger.log(
-      `daily promo reset: processed ${users.length} users, ${touched} accounts updated`,
+      `daily promo reset (target=${target}): processed ${users.length} users, ${touched} accounts updated`,
     );
   }
 
-  /** @returns 是否写库（含「已为 1 仅更新 lastDaily」） */
+  /** @returns 是否写库（含「已为目标值仅更新 lastDaily」） */
   private async resetDailyPromoForUser(
     userId: string,
     appId: string,
     todayUtc: string,
+    target: number,
   ): Promise<boolean> {
     return this.prisma.$transaction(async (tx) => {
       let acc = await tx.creditAccount.findUnique({
@@ -72,23 +78,25 @@ export class CreditSchedulerService {
           data: {
             userId,
             appId,
-            balancePromo: DAILY_PROMO_TARGET,
-            totalEarned: DAILY_PROMO_TARGET,
+            balancePromo: target,
+            totalEarned: target,
             lastDailyPromoResetDate: todayUtc,
           },
         });
-        await tx.creditTransaction.create({
-          data: {
-            accountId: acc.id,
-            appId,
-            type: 'grant',
-            creditType: 'promo',
-            amount: DAILY_PROMO_TARGET,
-            balanceAfter: DAILY_PROMO_TARGET,
-            reason: CreditReasonCode.SchedulerDailyPromoReset,
-            operatorId: null,
-          },
-        });
+        if (target > 0) {
+          await tx.creditTransaction.create({
+            data: {
+              accountId: acc.id,
+              appId,
+              type: 'grant',
+              creditType: 'promo',
+              amount: target,
+              balanceAfter: target,
+              reason: CreditReasonCode.SchedulerDailyPromoReset,
+              operatorId: null,
+            },
+          });
+        }
         return true;
       }
 
@@ -96,7 +104,7 @@ export class CreditSchedulerService {
         return false;
       }
 
-      if (acc.balancePromo === DAILY_PROMO_TARGET) {
+      if (acc.balancePromo === target) {
         await tx.creditAccount.update({
           where: { id: acc.id },
           data: { lastDailyPromoResetDate: todayUtc },
@@ -105,12 +113,12 @@ export class CreditSchedulerService {
       }
 
       const prev = acc.balancePromo;
-      if (prev < DAILY_PROMO_TARGET) {
-        const delta = DAILY_PROMO_TARGET - prev;
+      if (prev < target) {
+        const delta = target - prev;
         await tx.creditAccount.update({
           where: { id: acc.id },
           data: {
-            balancePromo: DAILY_PROMO_TARGET,
+            balancePromo: target,
             totalEarned: { increment: delta },
             lastDailyPromoResetDate: todayUtc,
           },
@@ -122,17 +130,17 @@ export class CreditSchedulerService {
             type: 'grant',
             creditType: 'promo',
             amount: delta,
-            balanceAfter: DAILY_PROMO_TARGET,
+            balanceAfter: target,
             reason: CreditReasonCode.SchedulerDailyPromoReset,
             operatorId: null,
           },
         });
       } else {
-        const delta = prev - DAILY_PROMO_TARGET;
+        const delta = prev - target;
         await tx.creditAccount.update({
           where: { id: acc.id },
           data: {
-            balancePromo: DAILY_PROMO_TARGET,
+            balancePromo: target,
             lastDailyPromoResetDate: todayUtc,
           },
         });
@@ -143,7 +151,7 @@ export class CreditSchedulerService {
             type: 'expire',
             creditType: 'promo',
             amount: -delta,
-            balanceAfter: DAILY_PROMO_TARGET,
+            balanceAfter: target,
             reason: CreditReasonCode.SchedulerDailyPromoReset,
             operatorId: null,
           },

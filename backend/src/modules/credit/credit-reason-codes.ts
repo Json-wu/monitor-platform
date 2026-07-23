@@ -27,8 +27,10 @@ export const CreditReasonCode = {
   RoomDecorationApiDeduct: 'room_decoration.api.deduct',
   /** 装修图上游失败后按原 breakdown 退回 */
   RoomDecorationApiRefund: 'room_decoration.api.refund',
-  /** UTC 每日 0 点将 promo（每日免费）池重置为 1 */
+  /** UTC 每日 0 点将 promo（每日免费）池重置为 DAILY_PROMO_CREDITS（默认 1） */
   SchedulerDailyPromoReset: 'scheduler.daily_promo_reset',
   /** 订阅账单周期边界：将 subscription（月度赠送）池清零 */
   SchedulerMonthlySubExpire: 'scheduler.monthly_sub_expire',
+  /** 新用户注册成功赠送积分（payg 永久池，数量见 SIGNUP_BONUS_CREDITS） */
+  SignupBonusGrant: 'signup.bonus.grant',
 } as const;
