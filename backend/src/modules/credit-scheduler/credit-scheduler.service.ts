@@ -84,6 +84,7 @@ export class CreditSchedulerService {
           },
         });
         if (target > 0) {
+          // balanceAfter = 三池合计（新建账号仅有 promo）
           await tx.creditTransaction.create({
             data: {
               accountId: acc.id,
@@ -113,6 +114,8 @@ export class CreditSchedulerService {
       }
 
       const prev = acc.balancePromo;
+      // 变动后余额统一记用户总余额（sub + payg + promo），与扣费流水一致
+      const totalAfter = acc.balanceSub + acc.balancePayg + target;
       if (prev < target) {
         const delta = target - prev;
         await tx.creditAccount.update({
@@ -130,7 +133,7 @@ export class CreditSchedulerService {
             type: 'grant',
             creditType: 'promo',
             amount: delta,
-            balanceAfter: target,
+            balanceAfter: totalAfter,
             reason: CreditReasonCode.SchedulerDailyPromoReset,
             operatorId: null,
           },
@@ -151,7 +154,7 @@ export class CreditSchedulerService {
             type: 'expire',
             creditType: 'promo',
             amount: -delta,
-            balanceAfter: target,
+            balanceAfter: totalAfter,
             reason: CreditReasonCode.SchedulerDailyPromoReset,
             operatorId: null,
           },
@@ -226,7 +229,7 @@ export class CreditSchedulerService {
             type: 'expire',
             creditType: 'subscription',
             amount: -subBal,
-            balanceAfter: 0,
+            balanceAfter: acc.balancePayg + acc.balancePromo,
             reason: CreditReasonCode.SchedulerMonthlySubExpire,
             referenceId: row.id,
             operatorId: null,
