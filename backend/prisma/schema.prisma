@@ -722,3 +722,21 @@ model AinewsEdgeJobLock {
 
   @@map("edge_job_locks")
 }
+
+// ─── Ops / 运维监控 ───────────────────────────────────────
+
+model OpsJobRun {
+  id         String    @id @default(uuid()) @db.Uuid
+  jobName    String    @map("job_name")
+  status     String // running | success | failed | skipped
+  startedAt  DateTime  @default(now()) @map("started_at")
+  finishedAt DateTime? @map("finished_at")
+  durationMs Int?      @map("duration_ms")
+  summary    String    @default("")
+  error      String?
+  metadata   Json?
+
+  @@index([jobName, startedAt(sort: Desc)])
+  @@index([status, startedAt(sort: Desc)])
+  @@map("ops_job_run")
+}

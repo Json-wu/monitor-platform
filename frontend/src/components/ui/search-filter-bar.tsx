@@ -12,6 +12,8 @@ interface SearchFilterBarProps {
   onSearchChange: (value: string) => void;
   onSubmit: () => void;
   loading?: boolean;
+  /** 仅展示筛选下拉，隐藏搜索框与提交按钮 */
+  hideSearch?: boolean;
   filters?: {
     key: string;
     label: string;
@@ -26,6 +28,7 @@ export function SearchFilterBar({
   onSearchChange,
   onSubmit,
   loading = false,
+  hideSearch = false,
   filters,
 }: SearchFilterBarProps) {
   return (
@@ -37,16 +40,18 @@ export function SearchFilterBar({
       }}
       className="flex flex-wrap items-stretch gap-3"
     >
-      <div className="min-w-[200px] flex-1">
-        <input
-          type="text"
-          className="input h-full"
-          placeholder="搜索…"
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          disabled={loading}
-        />
-      </div>
+      {hideSearch ? null : (
+        <div className="min-w-[200px] flex-1">
+          <input
+            type="text"
+            className="input h-full"
+            placeholder="搜索…"
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            disabled={loading}
+          />
+        </div>
+      )}
       {filters?.map((f) => (
         <div key={f.key}>
           <select
@@ -64,14 +69,16 @@ export function SearchFilterBar({
           </select>
         </div>
       ))}
-      <button type="submit" className="btn btn-primary gap-2" disabled={loading}>
-        {loading ? (
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-        ) : (
-          <Search className="h-4 w-4" aria-hidden />
-        )}
-        搜索
-      </button>
+      {hideSearch ? null : (
+        <button type="submit" className="btn btn-primary gap-2" disabled={loading}>
+          {loading ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          ) : (
+            <Search className="h-4 w-4" aria-hidden />
+          )}
+          搜索
+        </button>
+      )}
     </form>
   );
 }

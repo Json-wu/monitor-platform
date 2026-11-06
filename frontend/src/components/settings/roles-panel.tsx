@@ -30,6 +30,7 @@ const MODULES = [
   "feedback",
   "config",
   "system_logs",
+  "ops",
   "admins",
   "roles",
 ];
@@ -48,6 +49,7 @@ const MODULE_LABELS: Record<string, string> = {
   feedback: "用户反馈",
   config: "配置",
   system_logs: "系统日志",
+  ops: "运维监控",
   admins: "管理员",
   roles: "角色",
 };

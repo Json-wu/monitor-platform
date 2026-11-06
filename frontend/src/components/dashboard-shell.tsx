@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Activity,
   AppWindow,
   ArrowLeftRight,
   Bell,
@@ -47,6 +48,7 @@ const settingsNavItems = [
     permission: "apps:view" as const,
   },
   { segment: "system-logs", label: "系统活动", icon: ScrollText, permission: "system_logs:view" as const },
+  { segment: "ops", label: "运维监控", icon: Activity, permission: "ops:view" as const },
 ] as const;
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {

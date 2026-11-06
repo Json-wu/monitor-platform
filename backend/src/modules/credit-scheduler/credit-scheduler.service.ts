@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreditReasonCode } from '../credit/credit-reason-codes';
@@ -7,12 +7,40 @@ import {
   utcDateKey,
 } from '../../common/utils/credit-billing-dates.util';
 import { dailyPromoCredits } from '../../common/utils/credit-env.util';
+import { OpsJobName } from '../ops/ops-job.constants';
+import { OpsJobTracker } from '../ops/ops-job-tracker.service';
+import { OpsRuntimeRegistry } from '../ops/ops-runtime.registry';
+
+const RUNTIME_SOURCE = 'credit-scheduler';
 
 @Injectable()
-export class CreditSchedulerService {
+export class CreditSchedulerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(CreditSchedulerService.name);
+  private running = false;
+  private startedAt: number | null = null;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly opsTracker: OpsJobTracker,
+    private readonly opsRuntime: OpsRuntimeRegistry,
+  ) {}
+
+  onModuleInit() {
+    this.opsRuntime.register(RUNTIME_SOURCE, () => [
+      {
+        jobName: OpsJobName.CreditUtcMidnight,
+        enabled: !this.schedulerDisabled(),
+        running: this.running,
+        startedAt: this.startedAt
+          ? new Date(this.startedAt).toISOString()
+          : null,
+      },
+    ]);
+  }
+
+  onModuleDestroy() {
+    this.opsRuntime.unregister(RUNTIME_SOURCE);
+  }
 
   private schedulerDisabled(): boolean {
     return process.env.DISABLE_CREDIT_SCHEDULER === '1';
@@ -21,18 +49,38 @@ export class CreditSchedulerService {
   /** 每日 UTC 0:00：全应用活跃终端用户 promo 池重置为 DAILY_PROMO_CREDITS（默认 1）。 */
   @Cron('0 0 * * *', { timeZone: 'UTC' })
   async runUtcMidnightCreditJobs(): Promise<void> {
-    if (this.schedulerDisabled()) return;
+    if (this.schedulerDisabled()) {
+      await this.opsTracker.skip(OpsJobName.CreditUtcMidnight, 'disabled');
+      return;
+    }
+    if (this.running) {
+      await this.opsTracker.skip(
+        OpsJobName.CreditUtcMidnight,
+        'already_running',
+      );
+      return;
+    }
+    this.running = true;
+    this.startedAt = Date.now();
     const t0 = Date.now();
+    const runId = await this.opsTracker.start(OpsJobName.CreditUtcMidnight);
     this.logger.log('UTC midnight credit scheduler started');
     try {
       await this.resetDailyPromoForAllActiveUsers();
       await this.expireMonthlySubscriptionCredits();
+      await this.opsTracker.success(
+        runId,
+        `done in ${Date.now() - t0}ms`,
+      );
     } catch (e) {
       this.logger.error(
         `UTC midnight credit scheduler failed: ${e instanceof Error ? e.message : String(e)}`,
       );
+      await this.opsTracker.fail(runId, e);
       throw e;
     } finally {
+      this.running = false;
+      this.startedAt = null;
       this.logger.log(
         `UTC midnight credit scheduler done in ${Date.now() - t0}ms`,
       );
